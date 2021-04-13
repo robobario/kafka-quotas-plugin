@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
  */
 public class StaticQuotaCallback implements ClientQuotaCallback {
     private static final Logger log = LoggerFactory.getLogger(StaticQuotaCallback.class);
+    private static final String STATIC_QUOTA_PLUGIN_DISABLE_QUOTA_KEY = "static-quota-plugin.disable-quota";
     private volatile Map<ClientQuotaType, Quota> quotaMap = new HashMap<>();
     private final AtomicLong storageUsed = new AtomicLong(0);
     private volatile String logDirs;
@@ -37,16 +38,25 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private volatile int storageCheckInterval = Integer.MAX_VALUE;
     private final AtomicBoolean resetQuota = new AtomicBoolean(false);
     private final StorageChecker storageChecker = new StorageChecker();
+    private Boolean disableQuotaAnonymous;
 
     @Override
     public Map<String, String> quotaMetricTags(ClientQuotaType quotaType, KafkaPrincipal principal, String clientId) {
         Map<String, String> m = new HashMap<>();
         m.put("quota.type", quotaType.name());
+
+        if (disableQuotaAnonymous && KafkaPrincipal.ANONYMOUS.equals(principal)) {
+            m.put(STATIC_QUOTA_PLUGIN_DISABLE_QUOTA_KEY, Boolean.TRUE.toString());
+        }
         return m;
     }
 
     @Override
     public Double quotaLimit(ClientQuotaType quotaType, Map<String, String> metricTags) {
+        if (Boolean.TRUE.toString().equals(metricTags.get(STATIC_QUOTA_PLUGIN_DISABLE_QUOTA_KEY))) {
+            return Quota.upperBound(Double.MAX_VALUE).bound();
+        }
+
         // Don't allow producing messages if we're beyond the storage limit.
         long currentStorageUsage = storageUsed.get();
         if (ClientQuotaType.PRODUCE.equals(quotaType) && currentStorageUsage > storageQuotaSoft && currentStorageUsage < storageQuotaHard) {
@@ -99,6 +109,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         storageQuotaHard = config.getHardStorageQuota();
         storageCheckInterval = config.getStorageCheckInterval();
         logDirs = config.getLogDirs();
+        disableQuotaAnonymous = config.isDisableQuotaAnonymous();
 
         storageChecker.start();
         log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}", quotaMap, storageQuotaSoft, storageQuotaHard, storageCheckInterval);
