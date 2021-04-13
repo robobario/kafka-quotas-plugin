@@ -37,7 +37,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(STORAGE_QUOTA_SOFT_PROP, LONG, Long.MAX_VALUE, HIGH, "Hard limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_QUOTA_HARD_PROP, LONG, Long.MAX_VALUE, HIGH, "Soft limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_CHECK_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between storage check runs (default of 0 means disabled")
-                        .define(DISABLE_QUOTA_ANONYMOUS_PROP, BOOLEAN, false, MEDIUM, "If set true, anonymous users will be be subjected to the quota")
+                        .define(DISABLE_QUOTA_ANONYMOUS_PROP, BOOLEAN, false, MEDIUM, "If set true, anonymous users will not be subjected to the quota")
                         .define(LOG_DIRS_PROP, STRING, "/tmp/kafka-logs", HIGH, "Broker log directory"),
                 props,
                 doLog);
