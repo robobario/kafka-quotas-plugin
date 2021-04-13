@@ -53,7 +53,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
 
     @Override
     public Double quotaLimit(ClientQuotaType quotaType, Map<String, String> metricTags) {
-        if (Boolean.TRUE.toString().equals(metricTags.get(STATIC_QUOTA_PLUGIN_DISABLE_QUOTA_KEY))) {
+        if (metricTags != null && Boolean.TRUE.toString().equals(metricTags.get(STATIC_QUOTA_PLUGIN_DISABLE_QUOTA_KEY))) {
+            log.debug("Quota disabled for these metric tags: {}", metricTags);
             return Quota.upperBound(Double.MAX_VALUE).bound();
         }
 
