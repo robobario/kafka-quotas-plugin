@@ -38,7 +38,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private volatile int storageCheckInterval = Integer.MAX_VALUE;
     private final AtomicBoolean resetQuota = new AtomicBoolean(false);
     private final StorageChecker storageChecker = new StorageChecker();
-    private Boolean disableQuotaAnonymous;
+    private boolean disableQuotaAnonymous;
 
     @Override
     public Map<String, String> quotaMetricTags(ClientQuotaType quotaType, KafkaPrincipal principal, String clientId) {
@@ -112,7 +112,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         disableQuotaAnonymous = config.isDisableQuotaAnonymous();
 
         storageChecker.start();
-        log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}", quotaMap, storageQuotaSoft, storageQuotaHard, storageCheckInterval);
+        log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}. Disable quota for anonymous: {}", quotaMap, storageQuotaSoft, storageQuotaHard, storageCheckInterval, disableQuotaAnonymous);
     }
 
     private class StorageChecker implements Runnable {
