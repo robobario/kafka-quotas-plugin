@@ -13,6 +13,7 @@ import java.util.Map;
 
 import static org.apache.kafka.common.config.ConfigDef.Importance.HIGH;
 import static org.apache.kafka.common.config.ConfigDef.Importance.MEDIUM;
+import static org.apache.kafka.common.config.ConfigDef.Type.BOOLEAN;
 import static org.apache.kafka.common.config.ConfigDef.Type.DOUBLE;
 import static org.apache.kafka.common.config.ConfigDef.Type.INT;
 import static org.apache.kafka.common.config.ConfigDef.Type.LONG;
@@ -25,6 +26,7 @@ public class StaticQuotaConfig extends AbstractConfig {
     private static final String STORAGE_QUOTA_SOFT_PROP = "client.quota.callback.static.storage.soft";
     private static final String STORAGE_QUOTA_HARD_PROP = "client.quota.callback.static.storage.hard";
     private static final String STORAGE_CHECK_INTERVAL_PROP = "client.quota.callback.static.storage.check-interval";
+    private static final String DISABLE_QUOTA_ANONYMOUS_PROP = "client.quota.callback.static.disable-quota-anonymous";
     private static final String LOG_DIRS_PROP = "log.dirs";
 
     public StaticQuotaConfig(Map<String, ?> props, boolean doLog) {
@@ -35,6 +37,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(STORAGE_QUOTA_SOFT_PROP, LONG, Long.MAX_VALUE, HIGH, "Hard limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_QUOTA_HARD_PROP, LONG, Long.MAX_VALUE, HIGH, "Soft limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_CHECK_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between storage check runs (default of 0 means disabled")
+                        .define(DISABLE_QUOTA_ANONYMOUS_PROP, BOOLEAN, false, MEDIUM, "If set true, anonymous users will not be subjected to the quota")
                         .define(LOG_DIRS_PROP, STRING, "/tmp/kafka-logs", HIGH, "Broker log directory"),
                 props,
                 doLog);
@@ -67,6 +70,10 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     String getLogDirs() {
         return getString(LOG_DIRS_PROP);
+    }
+
+    boolean isDisableQuotaAnonymous() {
+        return getBoolean(DISABLE_QUOTA_ANONYMOUS_PROP) != null && getBoolean(DISABLE_QUOTA_ANONYMOUS_PROP);
     }
 }
 
