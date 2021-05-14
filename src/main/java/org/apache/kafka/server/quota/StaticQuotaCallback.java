@@ -136,6 +136,11 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         @Override
         public void run() {
             if (StaticQuotaCallback.this.logDirs != null && StaticQuotaCallback.this.storageQuotaSoft > 0 && StaticQuotaCallback.this.storageQuotaHard > 0 && StaticQuotaCallback.this.storageCheckInterval > 0) {
+                try {
+                    Thread.sleep(TimeUnit.SECONDS.toMillis(StaticQuotaCallback.this.storageCheckInterval));
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
                 while (running) {
                     try {
                         long diskUsage = checkDiskUsage();
