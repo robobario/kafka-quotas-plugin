@@ -160,7 +160,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             List<String> dirList = Arrays.asList(logDirs.split(","));
             Set<FileStore> fileStores = new HashSet<>();
             for (String d : dirList) {
-                long startTime = System.currentTimeMillis()-startTime)<10000)
+                long startTime = System.currentTimeMillis();
                 boolean check = false;
                 while (check||(System.currentTimeMillis()-startTime)<10000) {
                     if(Files.exists(Paths.get(d)) != false) {
