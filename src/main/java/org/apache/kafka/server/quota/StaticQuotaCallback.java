@@ -136,11 +136,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         @Override
         public void run() {
             if (StaticQuotaCallback.this.logDirs != null && StaticQuotaCallback.this.storageQuotaSoft > 0 && StaticQuotaCallback.this.storageQuotaHard > 0 && StaticQuotaCallback.this.storageCheckInterval > 0) {
-                try {
-                    Thread.sleep(TimeUnit.SECONDS.toMillis(StaticQuotaCallback.this.storageCheckInterval));
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
                 while (running) {
                     try {
                         long diskUsage = checkDiskUsage();
@@ -165,7 +160,22 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             List<String> dirList = Arrays.asList(logDirs.split(","));
             Set<FileStore> fileStores = new HashSet<>();
             for (String d : dirList) {
-                fileStores.add(Files.getFileStore(Paths.get(d)));
+                long startTime = System.currentTimeMillis()-startTime)<10000)
+                boolean check = false;
+                while (check||(System.currentTimeMillis()-startTime)<10000) {
+                    if(Files.exists(Paths.get(d)) != false) {
+                        fileStores.add(Files.getFileStore(Paths.get(d)));
+                        check = true;
+                        break;
+                    }
+                }
+                if(check == false) {
+                    try {
+                        fileStores.add(Files.getFileStore(Paths.get(d)));
+                    } catch (IOException e) {
+                        log.warn("Execution in storage checker thread", e);
+                    }
+                }
             }
 
             long totalUsed = 0;
