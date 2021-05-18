@@ -89,6 +89,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
 
     @Override
     public boolean updateClusterMetadata(Cluster cluster) {
+
+        storageChecker.start();
         return false;
     }
 
@@ -112,7 +114,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         logDirs = config.getLogDirs();
         disableQuotaAnonymous = config.isDisableQuotaAnonymous();
 
-        storageChecker.start();
         log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}. Disable quota for anonymous: {}", quotaMap, storageQuotaSoft, storageQuotaHard, storageCheckInterval, disableQuotaAnonymous);
     }
 
@@ -160,22 +161,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             List<String> dirList = Arrays.asList(logDirs.split(","));
             Set<FileStore> fileStores = new HashSet<>();
             for (String d : dirList) {
-                long startTime = System.currentTimeMillis();
-                boolean check = false;
-                while (check||(System.currentTimeMillis()-startTime)<10000) {
-                    if(Files.exists(Paths.get(d)) != false) {
-                        fileStores.add(Files.getFileStore(Paths.get(d)));
-                        check = true;
-                        break;
-                    }
-                }
-                if(check == false) {
-                    try {
-                        fileStores.add(Files.getFileStore(Paths.get(d)));
-                    } catch (IOException e) {
-                        log.warn("Execution in storage checker thread", e);
-                    }
-                }
+                fileStores.add(Files.getFileStore(Paths.get(d)));
             }
 
             long totalUsed = 0;
