@@ -90,7 +90,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @Override
     public boolean updateClusterMetadata(Cluster cluster) {
 
-        storageChecker.start();
+        storageChecker.startIfNecessary();
         return false;
     }
 
@@ -121,9 +121,10 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         private final Thread storageCheckerThread = new Thread(this, "storage-quota-checker");
         private volatile boolean running = false;
 
-        void start() {
+        void startIfNecessary() {
             if (!running) {
                 running = true;
+                storageCheckerThread.setDaemon(true);
                 storageCheckerThread.start();
             }
         }
@@ -137,21 +138,26 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         @Override
         public void run() {
             if (StaticQuotaCallback.this.logDirs != null && StaticQuotaCallback.this.storageQuotaSoft > 0 && StaticQuotaCallback.this.storageQuotaHard > 0 && StaticQuotaCallback.this.storageCheckInterval > 0) {
-                while (running) {
-                    try {
-                        long diskUsage = checkDiskUsage();
-                        long previousUsage = StaticQuotaCallback.this.storageUsed.getAndSet(diskUsage);
-                        if (diskUsage != previousUsage) {
-                            StaticQuotaCallback.this.resetQuota.set(true);
+                try{
+                    log.info("Quota Storage Checker is now starting");
+                    while (running) {
+                        try {
+                            long diskUsage = checkDiskUsage();
+                            long previousUsage = StaticQuotaCallback.this.storageUsed.getAndSet(diskUsage);
+                            if (diskUsage != previousUsage) {
+                                StaticQuotaCallback.this.resetQuota.set(true);
+                            }
+                            log.debug("Storage usage checked: {}", StaticQuotaCallback.this.storageUsed.get());
+                            Thread.sleep(TimeUnit.SECONDS.toMillis(StaticQuotaCallback.this.storageCheckInterval));
+                        } catch (InterruptedException e) {
+                            Thread.currentThread().interrupt();
+                            break;
+                        } catch (Exception e) {
+                            log.warn("Exception in storage checker thread", e);
                         }
-                        log.debug("Storage usage checked: {}", StaticQuotaCallback.this.storageUsed.get());
-                        Thread.sleep(TimeUnit.SECONDS.toMillis(StaticQuotaCallback.this.storageCheckInterval));
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        break;
-                    } catch (Exception e) {
-                        log.warn("Exception in storage checker thread", e);
                     }
+                } finally {
+                    log.info("Quota Storage Checker is now finishing");
                 }
 
             }
