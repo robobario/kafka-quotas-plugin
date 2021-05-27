@@ -17,7 +17,7 @@ sourceCompatibility = 11
 targetCompatibility = 11
 
 group = 'com.github.lulf.kafka-static-quota-plugin'
-version = '0.1'
+version = '0.2'
 
 repositories {
     // Use jcenter for resolving dependencies.
