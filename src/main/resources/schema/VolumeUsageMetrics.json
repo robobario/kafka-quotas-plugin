@@ -1,0 +1,190 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "http://example.com/example.json",
+  "type": "object",
+  "title": "VolumeUsage metrics",
+  "description": "Describes a single snapshot of volume usage from a particular broker",
+  "default": {},
+  "$defs": {
+    "limit": {
+      "type": "object",
+      "limit_type": {
+        "$id": "#/$defs/limit/limit_type",
+        "default": "",
+        "description": "Describes the configured limit for the broker instance.",
+        "examples": [
+          "MinFreeBytes"
+        ],
+        "title": "The type schema",
+        "enum": [
+          "ConsumedBytes",
+          "MinFreeBytes",
+          "MinFreePercentage"
+        ],
+        "type": "string"
+      },
+      "level": {
+        "$id": "#/$defs/limit/level",
+        "type": "integer",
+        "title": "The level schema",
+        "description": "Describes the point at which this limit triggers. For example 5% free or 10,000,000 bytes used.",
+        "default": 0,
+        "examples": [
+          1000000
+        ]
+      }
+    },
+    "bytes": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "examples": [
+    {
+      "brokerId": "0",
+      "snapshotAt": "2022-04-07T13:00:00Z",
+      "hardLimit": {
+        "type": "MinFreeBytes",
+        "level": 1000000
+      },
+      "softLimit": {
+        "type": "MinFreePercentage",
+        "level": 5
+      },
+      "volumes": [
+        {
+          "volumeName": "/dev/sdd",
+          "capacity": 107374182400,
+          "consumed": 10737418240
+        }
+      ]
+    }
+  ],
+  "required": [
+    "brokerId",
+    "snapshotAt",
+    "hardLimit",
+    "softLimit",
+    "volumes"
+  ],
+  "properties": {
+    "brokerId": {
+      "$id": "#/properties/brokerId",
+      "type": "string",
+      "title": "The brokerId schema",
+      "description": "The Identifier of the broker. Expected to be the same as https://kafka.apache.org/30/javadoc/org/apache/kafka/common/Node.html#idString() for the publishing broker",
+      "default": "",
+      "examples": [
+        "0"
+      ]
+    },
+    "snapshotAt": {
+      "$id": "#/properties/snapshotAt",
+      "type": "string",
+      "title": "snapshotAt",
+      "description": "The time at which the metrics were generated",
+      "default": "",
+      "format": "date-time",
+      "examples": [
+        "2022-04-07T13:00:00Z"
+      ]
+    },
+    "hardLimit": {
+      "$id": "#/properties/hardLimit",
+      "default": {},
+      "description": "Defines when the source broker is configured to paused producers",
+      "examples": [
+        {
+          "type": "MinFreeBytes",
+          "level": 1000000
+        }
+      ],
+      "$ref": "#/$defs/limit"
+    },
+    "softLimit": {
+      "$id": "#/properties/softLimit",
+      "type": "object",
+      "title": "The softLimit schema",
+      "description": "Defines when the source broker is configured to throttle producers",
+      "default": {},
+      "examples": [
+        {
+          "type": "MinFreePercentage",
+          "level": 5
+        }
+      ],
+      "$ref": "#/$defs/limit"
+    },
+    "volumes": {
+      "$id": "#/properties/volumes",
+      "type": "array",
+      "title": "AttachedVolumes schema",
+      "description": "Metrics for each volume attached to this broker",
+      "default": [],
+      "examples": [
+        [
+          {
+            "volumeName": "/dev/sdd",
+            "capacity": 107374182400,
+            "consumed": 10737418240
+          }
+        ]
+      ],
+      "additionalItems": false,
+      "items": {
+        "$id": "#/properties/volumes/items",
+        "type": "object",
+        "title": "Volume Schema",
+        "description": "Metrics for a given volume",
+        "default": {},
+        "examples": [
+          {
+            "volumeName": "/dev/sdd",
+            "capacity": 107374182400,
+            "consumed": 10737418240
+          }
+        ],
+        "required": [
+          "volumeName",
+          "capacity",
+          "consumed"
+        ],
+        "properties": {
+          "volumeName": {
+            "$id": "#/properties/volumes/items/anyOf/0/properties/volumeName",
+            "type": "string",
+            "title": "The volumeName schema",
+            "description": "A unique identifier (within the scope of a broker)",
+            "default": "",
+            "examples": [
+              "/dev/sdd"
+            ]
+          },
+          "capacity": {
+            "$id": "#/properties/volumes/items/anyOf/0/properties/capacity",
+            "type": "integer",
+            "title": "VolumeCapacity",
+            "description": "The capacity of the volume expressed in bytes",
+            "default": 0,
+            "$ref": "#/$defs/bytes",
+            "examples": [
+              107374182400
+            ]
+          },
+          "consumed": {
+            "$id": "#/properties/volumes/items/anyOf/0/properties/consumed",
+            "type": "integer",
+            "$ref": "#/$defs/bytes",
+            "title": "ConsumedBytes",
+            "description": "The number of bytes currently consumed on the volume",
+            "default": 0,
+            "examples": [
+              10737418240
+            ]
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

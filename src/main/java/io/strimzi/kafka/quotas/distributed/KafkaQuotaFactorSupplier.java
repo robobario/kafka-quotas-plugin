@@ -10,18 +10,18 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
 import io.strimzi.kafka.quotas.QuotaFactorSupplier;
-import io.strimzi.kafka.quotas.types.QuotaFactorUpdate;
+import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerRecords;
 
 public class KafkaQuotaFactorSupplier implements QuotaFactorSupplier, AutoCloseable, Runnable {
     private final Pattern subscriptionPattern;
 
-    private final Consumer<String, QuotaFactorUpdate> kafkaConsumer;
+    private final Consumer<String, UpdateQuotaFactor> kafkaConsumer;
 
     private final AtomicLong currentFactor;
 
-    public KafkaQuotaFactorSupplier(String subscriptionPattern, Consumer<String, QuotaFactorUpdate> kafkaConsumer) {
+    public KafkaQuotaFactorSupplier(String subscriptionPattern, Consumer<String, UpdateQuotaFactor> kafkaConsumer) {
         this.subscriptionPattern = Pattern.compile(subscriptionPattern);
         this.kafkaConsumer = kafkaConsumer;
         currentFactor = new AtomicLong(Double.doubleToLongBits(0.0));
@@ -45,9 +45,9 @@ public class KafkaQuotaFactorSupplier implements QuotaFactorSupplier, AutoClosea
     @Override
     public void run() {
         //TODO inject duration
-        final ConsumerRecords<String, QuotaFactorUpdate> consumerRecords = kafkaConsumer.poll(Duration.ofSeconds(10));
+        final ConsumerRecords<String, UpdateQuotaFactor> consumerRecords = kafkaConsumer.poll(Duration.ofSeconds(10));
         consumerRecords.forEach(cr -> {
-            final QuotaFactorUpdate updateMessage = cr.value();
+            final UpdateQuotaFactor updateMessage = cr.value();
             currentFactor.getAndSet(Double.doubleToLongBits(updateMessage.getFactor()));
         });
 
