@@ -1,0 +1,73 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "$id": "http://example.com/example.json/QuotaFactor",
+  "type": "object",
+  "title": "Update Quota Factor Message",
+  "description": "QuotaFactor Update Message schema",
+  "default": {},
+  "$defs": {
+    "percentage": {
+      "type": "number",
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "description": "The factor must be between 0.0 and 1.0 inclusive"
+    }
+  },
+  "examples": [
+    {
+      "quotaFactorUpdate": {
+        "validFrom": "2007-03-01T13:00:00Z",
+        "factor": 0.0
+      }
+    }
+  ],
+  "required": [
+    "quotaFactorUpdate"
+  ],
+  "properties": {
+    "quotaFactorUpdate": {
+      "$id": "#/properties/quotaFactor",
+      "type": "object",
+      "title": "The quotaFactorUpdate schema",
+      "description": "Notifies the listener of a change to the applicable quota factor",
+      "default": {},
+      "examples": [
+        {
+          "validFrom": "2007-03-01T13:00:00Z",
+          "factor": 0.0
+        }
+      ],
+      "required": [
+        "validFrom",
+        "factor"
+      ],
+      "properties": {
+        "validFrom": {
+          "$id": "#/properties/validFrom",
+          "default": "",
+          "description": "The time at which the new factor takes affect.",
+          "examples": [
+            "2022-04-08T13:00:00Z"
+          ],
+          "title": "The validFrom schema",
+          "readOnly": true,
+          "format": "date-time",
+          "type": "string"
+        },
+        "factor": {
+          "$id": "#/properties/factor",
+          "default": 0.0,
+          "description": "The factor to be applied to configured quotas. A factor of 0.0 implies there is no quota available, a factor of 1.0 implies no additional restrictions.",
+          "examples": [
+            0.0
+          ],
+          "title": "The factor schema",
+          "$ref": "#/$defs/percentage",
+          "readOnly": true,
+          "type": "number"
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

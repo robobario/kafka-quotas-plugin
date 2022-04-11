@@ -17,6 +17,8 @@ import java.util.stream.Collectors;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.MetricName;
+import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
+import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -26,11 +28,10 @@ import org.apache.kafka.server.quota.ClientQuotaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static java.util.Locale.ENGLISH;
-
 /**
  * Allows configuring generic quotas for a broker independent of users and clients.
  */
+//TODO its not really a static callback anymore
 public class StaticQuotaCallback implements ClientQuotaCallback {
     private static final Logger log = LoggerFactory.getLogger(StaticQuotaCallback.class);
     private static final String EXCLUDED_PRINCIPAL_QUOTA_KEY = "excluded-principal-quota-key";
@@ -46,6 +47,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private AtomicLong lastLoggedMessageSoftTimeMs = new AtomicLong(0);
     private AtomicLong lastLoggedMessageHardTimeMs = new AtomicLong(0);
     private final String scope = "io.strimzi.kafka.quotas.StaticQuotaCallback";
+    private volatile QuotaSupplier staticQuotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
 
     public StaticQuotaCallback() {
         this(new StorageChecker());
@@ -68,21 +70,21 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @Override
     public Double quotaLimit(ClientQuotaType quotaType, Map<String, String> metricTags) {
         if (Boolean.TRUE.toString().equals(metricTags.get(EXCLUDED_PRINCIPAL_QUOTA_KEY))) {
-            return Quota.upperBound(Double.MAX_VALUE).bound();
+            return QuotaSupplier.UNLIMITED;
         }
 
         // Don't allow producing messages if we're beyond the storage limit.
         long currentStorageUsage = storageUsed.get();
+        final double requestQuota = staticQuotaSupplier.quotaFor(quotaType, metricTags);
         if (ClientQuotaType.PRODUCE.equals(quotaType) && currentStorageUsage > storageQuotaSoft && currentStorageUsage < storageQuotaHard) {
-            double minThrottle = quotaMap.getOrDefault(quotaType, Quota.upperBound(Double.MAX_VALUE)).bound();
-            double limit = minThrottle * (1.0 - (1.0 * (currentStorageUsage - storageQuotaSoft) / (storageQuotaHard - storageQuotaSoft)));
+            double limit = requestQuota * (1.0 - (1.0 * (currentStorageUsage - storageQuotaSoft) / (storageQuotaHard - storageQuotaSoft)));
             maybeLog(lastLoggedMessageSoftTimeMs, "Throttling producer rate because disk is beyond soft limit. Used: {}. Quota: {}", storageUsed, limit);
             return limit;
         } else if (ClientQuotaType.PRODUCE.equals(quotaType) && currentStorageUsage >= storageQuotaHard) {
             maybeLog(lastLoggedMessageHardTimeMs, "Limiting producer rate because disk is full. Used: {}. Limit: {}", storageUsed, storageQuotaHard);
-            return 1.0;
+            return QuotaSupplier.PAUSED;
         }
-        return quotaMap.getOrDefault(quotaType, Quota.upperBound(Double.MAX_VALUE)).bound();
+        return requestQuota;
     }
 
     /**
@@ -142,7 +144,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @Override
     public void configure(Map<String, ?> configs) {
         StaticQuotaConfig config = new StaticQuotaConfig(configs, true);
-        quotaMap = config.getQuotaMap();
+        staticQuotaSupplier = new StaticQuotaSupplier(config.getQuotaMap());
         storageQuotaSoft = config.getSoftStorageQuota();
         storageQuotaHard = config.getHardStorageQuota();
         excludedPrincipalNameList = config.getExcludedPrincipalNameList();
@@ -172,11 +174,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             public Long value() {
                 return storageQuotaHard;
             }
-        });
-
-        quotaMap.forEach((clientQuotaType, quota) -> {
-            String name = clientQuotaType.name().toUpperCase(ENGLISH).charAt(0) + clientQuotaType.name().toLowerCase(ENGLISH).substring(1);
-            Metrics.newGauge(metricName(StaticQuotaCallback.class, name), new ClientQuotaGauge(quota));
         });
     }
 
