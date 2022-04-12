@@ -166,12 +166,12 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                 logDirs,
                 this::updateUsedStorage);
 
+        if (dataSourceFuture != null) {
+            dataSourceFuture.cancel(false);
+        }
         if (config.getStorageCheckInterval() > 0) {
             final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, new Limit(Limit.LimitType.CONSUMED_BYTES, storageQuotaSoft), new Limit(Limit.LimitType.CONSUMED_BYTES, storageQuotaHard), config.getStorageCheckInterval(), "-1", snapshot -> {
             });
-            if (dataSourceFuture != null) {
-                dataSourceFuture.cancel(false);
-            }
             dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
         }
         log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", quotaMap, storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);
