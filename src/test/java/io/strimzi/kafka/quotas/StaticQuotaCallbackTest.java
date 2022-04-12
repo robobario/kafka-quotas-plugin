@@ -4,6 +4,7 @@
  */
 package io.strimzi.kafka.quotas;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
@@ -37,6 +38,7 @@ import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class StaticQuotaCallbackTest {
 
@@ -212,6 +214,20 @@ class StaticQuotaCallbackTest {
 
         //Then
         verify(scheduledFuture).cancel(false);
+    }
+
+    @Test
+    void shouldShutdownExecutorServiceOnClose() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService);
+        when(executorService.shutdownNow()).thenReturn(List.of());
+
+        //When
+        staticQuotaCallback.close();
+
+        //Then
+        verify(executorService).shutdownNow();
     }
 
     private SortedMap<MetricName, Metric> getMetricGroup(String p, String t) {

@@ -144,6 +144,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     public void close() {
         try {
             storageChecker.stop();
+            executorService.shutdownNow();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
