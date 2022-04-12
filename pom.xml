@@ -102,6 +102,7 @@
 
         <!-- property to skip surefire tests during failsafe execution -->
         <skip.surefire.tests>${skipTests}</skip.surefire.tests>
+        <jimfs.version>1.2</jimfs.version>
     </properties>
 
     <distributionManagement>
@@ -161,6 +162,14 @@
             <version>${assertj.version}</version>
             <scope>test</scope>
         </dependency>
+
+        <dependency>
+            <groupId>com.google.jimfs</groupId>
+            <artifactId>jimfs</artifactId>
+            <version>${jimfs.version}</version>
+            <scope>test</scope>
+        </dependency>
+
     </dependencies>
 
     <build>
@@ -439,6 +448,7 @@
                     <includeConstructors>true</includeConstructors>
                     <includeSetters>false</includeSetters>
                     <includeGetters>true</includeGetters>
+                    <useLongIntegers>true</useLongIntegers>
                 </configuration>
                 <executions>
                     <execution>

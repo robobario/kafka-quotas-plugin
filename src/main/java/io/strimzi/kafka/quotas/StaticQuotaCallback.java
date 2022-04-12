@@ -9,6 +9,9 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -19,6 +22,7 @@ import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.MetricName;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
+import io.strimzi.kafka.quotas.types.Limit;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -43,18 +47,25 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private volatile List<String> excludedPrincipalNameList = List.of();
     private final AtomicBoolean resetQuota = new AtomicBoolean(true);
     private final StorageChecker storageChecker;
+    private final ScheduledExecutorService executorService;
     private final static long LOGGING_DELAY_MS = 1000;
     private AtomicLong lastLoggedMessageSoftTimeMs = new AtomicLong(0);
     private AtomicLong lastLoggedMessageHardTimeMs = new AtomicLong(0);
     private final String scope = "io.strimzi.kafka.quotas.StaticQuotaCallback";
     private volatile QuotaSupplier staticQuotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
+    private volatile ScheduledFuture<?> dataSourceFuture;
 
     public StaticQuotaCallback() {
-        this(new StorageChecker());
+        this(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(r -> {
+            final Thread thread = new Thread(r, StaticQuotaCallback.class.getSimpleName() + "-taskExecutor");
+            thread.setDaemon(true);
+            return thread;
+        }));
     }
 
-    StaticQuotaCallback(StorageChecker storageChecker) {
+    StaticQuotaCallback(StorageChecker storageChecker, ScheduledExecutorService executorService) {
         this.storageChecker = storageChecker;
+        this.executorService = executorService;
     }
 
     @Override
@@ -155,6 +166,14 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                 logDirs,
                 this::updateUsedStorage);
 
+        if (config.getStorageCheckInterval() > 0) {
+            final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, new Limit(Limit.LimitType.CONSUMED_BYTES, storageQuotaSoft), new Limit(Limit.LimitType.CONSUMED_BYTES, storageQuotaHard), config.getStorageCheckInterval(), "-1", snapshot -> {
+            });
+            if (dataSourceFuture != null) {
+                dataSourceFuture.cancel(false);
+            }
+            dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
+        }
         log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", quotaMap, storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);
         if (!excludedPrincipalNameList.isEmpty()) {
             log.info("Excluded principals {}", excludedPrincipalNameList);

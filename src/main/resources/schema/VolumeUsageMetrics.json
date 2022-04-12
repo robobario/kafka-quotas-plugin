@@ -7,31 +7,34 @@
   "default": {},
   "$defs": {
     "limit": {
+      "$id": "#/$defs/limit",
       "type": "object",
-      "limit_type": {
-        "$id": "#/$defs/limit/limit_type",
-        "default": "",
-        "description": "Describes the configured limit for the broker instance.",
-        "examples": [
-          "MinFreeBytes"
-        ],
-        "title": "The type schema",
-        "enum": [
-          "ConsumedBytes",
-          "MinFreeBytes",
-          "MinFreePercentage"
-        ],
-        "type": "string"
-      },
-      "level": {
-        "$id": "#/$defs/limit/level",
-        "type": "integer",
-        "title": "The level schema",
-        "description": "Describes the point at which this limit triggers. For example 5% free or 10,000,000 bytes used.",
-        "default": 0,
-        "examples": [
-          1000000
-        ]
+      "properties": {
+        "limit_type": {
+          "$id": "#/$defs/limit/limit_type",
+          "default": "",
+          "description": "Describes the configured limit for the broker instance.",
+          "examples": [
+            "MinFreeBytes"
+          ],
+          "title": "The type schema",
+          "enum": [
+            "ConsumedBytes",
+            "MinFreeBytes",
+            "MinFreePercentage"
+          ],
+          "type": "string"
+        },
+        "level": {
+          "$id": "#/$defs/limit/level",
+          "type": "integer",
+          "title": "The level schema",
+          "description": "Describes the point at which this limit triggers. For example 5% free or 10,000,000 bytes used.",
+          "default": 0,
+          "examples": [
+            1000000
+          ]
+        }
       }
     },
     "bytes": {

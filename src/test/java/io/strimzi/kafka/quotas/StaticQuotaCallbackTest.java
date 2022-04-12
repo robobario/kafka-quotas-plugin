@@ -7,6 +7,10 @@ package io.strimzi.kafka.quotas;
 import java.util.Map;
 import java.util.Optional;
 import java.util.SortedMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 import com.yammer.metrics.Metrics;
@@ -20,12 +24,16 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import static io.strimzi.kafka.quotas.StaticQuotaConfig.STORAGE_CHECK_INTERVAL_PROP;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -69,7 +77,7 @@ class StaticQuotaCallbackTest {
     void excludedPrincipal() {
         KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
         target.configure(Map.of(StaticQuotaConfig.EXCLUDED_PRINCIPAL_NAME_LIST_PROP, "foo,bar",
-                                StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
+                StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
         double fooQuotaLimit = target.quotaLimit(ClientQuotaType.PRODUCE, target.quotaMetricTags(ClientQuotaType.PRODUCE, foo, "clientId"));
         assertEquals(Double.MAX_VALUE, fooQuotaLimit);
 
@@ -81,7 +89,7 @@ class StaticQuotaCallbackTest {
     @Test
     void pluginLifecycle() throws Exception {
         StorageChecker mock = mock(StorageChecker.class);
-        StaticQuotaCallback target = new StaticQuotaCallback(mock);
+        StaticQuotaCallback target = new StaticQuotaCallback(mock, Executors.newSingleThreadScheduledExecutor());
         target.configure(Map.of());
         target.updateClusterMetadata(null);
         verify(mock, times(1)).startIfNecessary();
@@ -94,7 +102,7 @@ class StaticQuotaCallbackTest {
         StorageChecker mock = mock(StorageChecker.class);
         ArgumentCaptor<Consumer<Long>> argument = ArgumentCaptor.forClass(Consumer.class);
         doNothing().when(mock).configure(anyLong(), anyList(), argument.capture());
-        StaticQuotaCallback quotaCallback = new StaticQuotaCallback(mock);
+        StaticQuotaCallback quotaCallback = new StaticQuotaCallback(mock, Executors.newSingleThreadScheduledExecutor());
         quotaCallback.configure(Map.of());
         Consumer<Long> storageUpdateConsumer = argument.getValue();
         quotaCallback.updateClusterMetadata(null);
@@ -117,7 +125,7 @@ class StaticQuotaCallbackTest {
         ArgumentCaptor<Consumer<Long>> argument = ArgumentCaptor.forClass(Consumer.class);
         doNothing().when(mock).configure(anyLong(), anyList(), argument.capture());
 
-        StaticQuotaCallback quotaCallback = new StaticQuotaCallback(mock);
+        StaticQuotaCallback quotaCallback = new StaticQuotaCallback(mock, Executors.newSingleThreadScheduledExecutor());
 
         quotaCallback.configure(Map.of(
                 StaticQuotaConfig.STORAGE_QUOTA_SOFT_PROP, 15L,
@@ -160,6 +168,50 @@ class StaticQuotaCallbackTest {
         MetricName name = group.firstKey();
         String expectedMbeanName = String.format("io.strimzi.kafka.quotas:type=StaticQuotaCallback,name=%s", name.getName());
         assertEquals(expectedMbeanName, name.getMBeanName(), "unexpected mbean name");
+    }
+
+    @Test
+    void shouldNotScheduleDataSourceTask() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService);
+
+        //When
+        staticQuotaCallback.configure(Map.of());
+
+        //Then
+        verify(executorService, times(0)).scheduleWithFixedDelay(any(), anyLong(), anyLong(), any());
+    }
+
+    @Test
+    void shouldScheduleDataSourceTask() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService);
+        final Long interval = 10L;
+
+        //When
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval.intValue()));
+
+        //Then
+        verify(executorService).scheduleWithFixedDelay(any(Runnable.class), eq(0L), eq(interval), eq(TimeUnit.SECONDS));
+    }
+
+    @Test
+    void shouldCancelExistingScheduleDataSourceTask() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService);
+        final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(any(), anyLong(), anyLong(), any());
+        final int interval = 10;
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
+
+        //When
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
+
+        //Then
+        verify(scheduledFuture).cancel(false);
     }
 
     private SortedMap<MetricName, Metric> getMetricGroup(String p, String t) {
