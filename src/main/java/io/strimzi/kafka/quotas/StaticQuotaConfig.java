@@ -9,13 +9,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.strimzi.kafka.quotas.distributed.KafkaQuotaFactorSupplier;
+import io.strimzi.kafka.quotas.json.JacksonDeserializer;
+import io.strimzi.kafka.quotas.json.JacksonSerializer;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
-import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.Limit;
+import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
+import org.apache.kafka.clients.consumer.KafkaConsumer;
+import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.metrics.Quota;
+import org.apache.kafka.common.serialization.StringDeserializer;
+import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.server.quota.ClientQuotaType;
 
 import static org.apache.kafka.common.config.ConfigDef.Importance.HIGH;
@@ -39,9 +48,12 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String STORAGE_QUOTA_HARD_PROP = "client.quota.callback.static.storage.hard";
     static final String STORAGE_CHECK_INTERVAL_PROP = "client.quota.callback.static.storage.check-interval";
 
-    static final String QUOTA_FACTOR_UPDATE_TOPIC = "client.quota.callback.quotaFactor.topicPattern";
+    static final String QUOTA_FACTOR_UPDATE_TOPIC_PATTERN = "client.quota.callback.quotaFactor.topicPattern";
+
+    static final String VOLUME_USAGE_METRICS_TOPIC = "client.quota.callback.usageMetrics.topic";
 
     static final String LOG_DIRS_PROP = "log.dirs";
+    private final ObjectMapper objectMapper;
 
     /**
      * Construct a configuration for the static quota plugin.
@@ -58,10 +70,12 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(STORAGE_QUOTA_SOFT_PROP, LONG, Long.MAX_VALUE, HIGH, "Hard limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_QUOTA_HARD_PROP, LONG, Long.MAX_VALUE, HIGH, "Soft limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_CHECK_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between storage check runs (in seconds, default of 0 means disabled")
-                        .define(QUOTA_FACTOR_UPDATE_TOPIC, STRING, "__strimzi_quotaFactorUpdate", LOW, "topic used to update new quota factors to apply to requests")
+                        .define(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN, STRING, "__strimzi_quotaFactorUpdate", LOW, "topic used to update new quota factors to apply to requests")
+                        .define(VOLUME_USAGE_METRICS_TOPIC, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
                 props,
                 doLog);
+        objectMapper = new ObjectMapper();
     }
 
     Map<ClientQuotaType, Quota> getQuotaMap() {
@@ -106,8 +120,13 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
     
     public QuotaFactorSupplier quotaFactorSupplier() {
-        final String factorUpdateTopic = getString(QUOTA_FACTOR_UPDATE_TOPIC);
-        return UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
+        final String factorUpdateTopicPattern = getString(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN);
+        final KafkaConsumer<String, UpdateQuotaFactor> kafkaConsumer = new KafkaConsumer<>(getKafkaConfig(), new StringDeserializer(), new JacksonDeserializer<>(objectMapper, UpdateQuotaFactor.class));
+        //TODO who closes the consumer?
+        final KafkaQuotaFactorSupplier kafkaQuotaFactorSupplier = new KafkaQuotaFactorSupplier(factorUpdateTopicPattern, kafkaConsumer);
+        //TODO should we really start here?
+        kafkaQuotaFactorSupplier.start();
+        return kafkaQuotaFactorSupplier;
     }
 
     public QuotaSupplier quotaSupplier() {
@@ -119,8 +138,14 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     public Consumer<VolumeUsageMetrics> volumeUsageMetricsPublisher() {
-        return snapshot -> {
-        };
+        final KafkaProducer<String, VolumeUsageMetrics> kafkaProducer = new KafkaProducer<>(getKafkaConfig(), new StringSerializer(), new JacksonSerializer<>(objectMapper));
+        final String brokerId = getBrokerId();
+        final String topic = getString(VOLUME_USAGE_METRICS_TOPIC);
+        return snapshot -> kafkaProducer.send(new ProducerRecord<>(topic, brokerId, snapshot));
+    }
+
+    private Map<String, Object> getKafkaConfig() {
+        return Map.of();
     }
 }
 

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>io.strimzi</groupId>
@@ -7,14 +8,16 @@
     <version>0.2.0</version>
 
     <licenses>
-		<license>
-			<name>The Apache License, Version 2.0</name>
-			<url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
-		</license>
-	</licenses>
+        <license>
+            <name>The Apache License, Version 2.0</name>
+            <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+        </license>
+    </licenses>
 
     <name>Kafka Quota Plugin</name>
-    <description>A broker quota plugin for Apache Kafka to allow setting a per-broker limits statically in the broker configuration.</description>
+    <description>A broker quota plugin for Apache Kafka to allow setting a per-broker limits statically in the broker
+        configuration.
+    </description>
     <url>https://strimzi.io/</url>
 
     <scm>
@@ -144,6 +147,18 @@
         </dependency>
 
         <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter-api</artifactId>
             <version>${junit.version}</version>
@@ -153,6 +168,13 @@
         <dependency>
             <groupId>org.mockito</groupId>
             <artifactId>mockito-core</artifactId>
+            <version>${mockito.version}</version>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-junit-jupiter</artifactId>
             <version>${mockito.version}</version>
             <scope>test</scope>
         </dependency>
@@ -330,13 +352,15 @@
             <plugin>
                 <groupId>com.github.spotbugs</groupId>
                 <artifactId>spotbugs-maven-plugin</artifactId>
-                <version>4.0.0</version><dependencies>
-                <!-- overwrite dependency on spotbugs if you want to specify the version of˓→spotbugs -->
-                <dependency>
-                    <groupId>com.github.spotbugs</groupId>
-                    <artifactId>spotbugs</artifactId>
-                    <version>${spotbugs.version}</version>
-                </dependency></dependencies>
+                <version>4.0.0</version>
+                <dependencies>
+                    <!-- overwrite dependency on spotbugs if you want to specify the version of˓→spotbugs -->
+                    <dependency>
+                        <groupId>com.github.spotbugs</groupId>
+                        <artifactId>spotbugs</artifactId>
+                        <version>${spotbugs.version}</version>
+                    </dependency>
+                </dependencies>
                 <configuration>
                     <effort>Max</effort>
                     <!-- Reports all bugs (other values are medium and max) -->
@@ -391,8 +415,11 @@
                             <goal>jar</goal>
                         </goals>
                         <configuration>
-                            <sourcepath>${project.build.sourceDirectory}:${project.build.directory}/generated-sources/annotations:${project.build.directory}/generated-sources/jsonschema2pojo</sourcepath>
-                            <excludePackageNames>io.strimzi.kafka.quotas.types</excludePackageNames><!-- the generated code fails as it doesn't document @param or @return values -->
+                            <sourcepath>
+                                ${project.build.sourceDirectory}:${project.build.directory}/generated-sources/annotations:${project.build.directory}/generated-sources/jsonschema2pojo
+                            </sourcepath>
+                            <excludePackageNames>io.strimzi.kafka.quotas.types
+                            </excludePackageNames><!-- the generated code fails as it doesn't document @param or @return values -->
                             <show>public</show>
                             <failOnError>true</failOnError>
                             <failOnWarnings>true</failOnWarnings>
@@ -413,7 +440,7 @@
                     </archive>
                 </configuration>
             </plugin>
-                <plugin>
+            <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <version>3.0.0-M2</version>

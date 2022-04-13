@@ -15,6 +15,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import com.yammer.metrics.Metrics;
@@ -45,6 +46,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private final AtomicBoolean resetQuota = new AtomicBoolean(true);
     private final StorageChecker storageChecker;
     private final ScheduledExecutorService executorService;
+    private final BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory;
     private final static long LOGGING_DELAY_MS = 1000;
     private AtomicLong lastLoggedMessageSoftTimeMs = new AtomicLong(0);
     private AtomicLong lastLoggedMessageHardTimeMs = new AtomicLong(0);
@@ -56,16 +58,20 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private volatile ScheduledFuture<?> dataSourceFuture;
 
     public StaticQuotaCallback() {
-        this(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(r -> {
-            final Thread thread = new Thread(r, StaticQuotaCallback.class.getSimpleName() + "-taskExecutor");
-            thread.setDaemon(true);
-            return thread;
-        }));
+        this(new StorageChecker(),
+                Executors.newSingleThreadScheduledExecutor(r -> {
+                    final Thread thread = new Thread(r, StaticQuotaCallback.class.getSimpleName() + "-taskExecutor");
+                    thread.setDaemon(true);
+                    return thread;
+                }),
+                StaticQuotaConfig::new
+        );
     }
 
-    StaticQuotaCallback(StorageChecker storageChecker, ScheduledExecutorService executorService) {
+    StaticQuotaCallback(StorageChecker storageChecker, ScheduledExecutorService executorService, BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory) {
         this.storageChecker = storageChecker;
         this.executorService = executorService;
+        this.pluginConfigFactory = pluginConfigFactory;
     }
 
     @Override
@@ -148,7 +154,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
 
     @Override
     public void configure(Map<String, ?> configs) {
-        StaticQuotaConfig config = new StaticQuotaConfig(configs, true);
+        StaticQuotaConfig config = pluginConfigFactory.apply(configs, true);
         staticQuotaSupplier = config.quotaSupplier();
         quotaFactorSupplier = config.quotaFactorSupplier();
         storageQuotaSoft = config.getSoftStorageQuota();
