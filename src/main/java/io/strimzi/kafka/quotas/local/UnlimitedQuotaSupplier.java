@@ -7,12 +7,13 @@ package io.strimzi.kafka.quotas.local;
 
 import java.util.Map;
 
+import io.strimzi.kafka.quotas.QuotaFactorSupplier;
 import io.strimzi.kafka.quotas.QuotaSupplier;
 import org.apache.kafka.server.quota.ClientQuotaType;
 
-public class UnlimitedQuotaSupplier implements QuotaSupplier {
+public class UnlimitedQuotaSupplier implements QuotaSupplier, QuotaFactorSupplier {
 
-    public static final QuotaSupplier UNLIMITED_QUOTA_SUPPLIER = new UnlimitedQuotaSupplier();
+    public static final UnlimitedQuotaSupplier UNLIMITED_QUOTA_SUPPLIER = new UnlimitedQuotaSupplier();
 
     private UnlimitedQuotaSupplier() {
     }
@@ -20,5 +21,10 @@ public class UnlimitedQuotaSupplier implements QuotaSupplier {
     @Override
     public double quotaFor(ClientQuotaType quotaType, Map<String, String> metricTags) {
         return QuotaSupplier.UNLIMITED;
+    }
+
+    @Override
+    public Double get() {
+        return 1.0;
     }
 }

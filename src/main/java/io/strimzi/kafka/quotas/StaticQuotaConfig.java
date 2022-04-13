@@ -4,21 +4,28 @@
  */
 package io.strimzi.kafka.quotas;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Consumer;
+
+import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
+import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
+import io.strimzi.kafka.quotas.types.Limit;
+import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.server.quota.ClientQuotaType;
 
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-
 import static org.apache.kafka.common.config.ConfigDef.Importance.HIGH;
+import static org.apache.kafka.common.config.ConfigDef.Importance.LOW;
 import static org.apache.kafka.common.config.ConfigDef.Importance.MEDIUM;
 import static org.apache.kafka.common.config.ConfigDef.Type.DOUBLE;
 import static org.apache.kafka.common.config.ConfigDef.Type.INT;
 import static org.apache.kafka.common.config.ConfigDef.Type.LIST;
 import static org.apache.kafka.common.config.ConfigDef.Type.LONG;
+import static org.apache.kafka.common.config.ConfigDef.Type.STRING;
 
 /**
  * Configuration for the static quota plugin.
@@ -31,10 +38,14 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String STORAGE_QUOTA_SOFT_PROP = "client.quota.callback.static.storage.soft";
     static final String STORAGE_QUOTA_HARD_PROP = "client.quota.callback.static.storage.hard";
     static final String STORAGE_CHECK_INTERVAL_PROP = "client.quota.callback.static.storage.check-interval";
+
+    static final String QUOTA_FACTOR_UPDATE_TOPIC = "client.quota.callback.quotaFactor.topicPattern";
+
     static final String LOG_DIRS_PROP = "log.dirs";
 
     /**
      * Construct a configuration for the static quota plugin.
+     *
      * @param props the configuration properties
      * @param doLog whether the configurations should be logged
      */
@@ -47,6 +58,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(STORAGE_QUOTA_SOFT_PROP, LONG, Long.MAX_VALUE, HIGH, "Hard limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_QUOTA_HARD_PROP, LONG, Long.MAX_VALUE, HIGH, "Soft limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_CHECK_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between storage check runs (in seconds, default of 0 means disabled")
+                        .define(QUOTA_FACTOR_UPDATE_TOPIC, STRING, "__strimzi_quotaFactorUpdate", LOW, "topic used to update new quota factors to apply to requests")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
                 props,
                 doLog);
@@ -73,6 +85,14 @@ public class StaticQuotaConfig extends AbstractConfig {
         return getLong(STORAGE_QUOTA_SOFT_PROP);
     }
 
+    Limit getHardLimit() {
+        return new Limit(Limit.LimitType.CONSUMED_BYTES, getLong(STORAGE_QUOTA_HARD_PROP));
+    }
+
+    Limit getSoftLimit() {
+        return new Limit(Limit.LimitType.CONSUMED_BYTES, getLong(STORAGE_QUOTA_SOFT_PROP));
+    }
+
     int getStorageCheckInterval() {
         return getInt(STORAGE_CHECK_INTERVAL_PROP);
     }
@@ -83,6 +103,24 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     List<String> getExcludedPrincipalNameList() {
         return getList(EXCLUDED_PRINCIPAL_NAME_LIST_PROP);
+    }
+    
+    public QuotaFactorSupplier quotaFactorSupplier() {
+        final String factorUpdateTopic = getString(QUOTA_FACTOR_UPDATE_TOPIC);
+        return UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
+    }
+
+    public QuotaSupplier quotaSupplier() {
+        return new StaticQuotaSupplier(getQuotaMap());
+    }
+
+    public String getBrokerId() {
+        return System.getProperty("broker.id", "-1");
+    }
+
+    public Consumer<VolumeUsageMetrics> volumeUsageMetricsPublisher() {
+        return snapshot -> {
+        };
     }
 }
 

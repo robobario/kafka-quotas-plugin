@@ -20,9 +20,7 @@ import java.util.stream.Collectors;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.MetricName;
-import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
-import io.strimzi.kafka.quotas.types.Limit;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -40,7 +38,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private static final Logger log = LoggerFactory.getLogger(StaticQuotaCallback.class);
     private static final String EXCLUDED_PRINCIPAL_QUOTA_KEY = "excluded-principal-quota-key";
 
-    private volatile Map<ClientQuotaType, Quota> quotaMap = new HashMap<>();
     private final AtomicLong storageUsed = new AtomicLong(0);
     private volatile long storageQuotaSoft = Long.MAX_VALUE;
     private volatile long storageQuotaHard = Long.MAX_VALUE;
@@ -52,7 +49,10 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private AtomicLong lastLoggedMessageSoftTimeMs = new AtomicLong(0);
     private AtomicLong lastLoggedMessageHardTimeMs = new AtomicLong(0);
     private final String scope = "io.strimzi.kafka.quotas.StaticQuotaCallback";
+
+    //Default to no restrictions until things have been configured.
     private volatile QuotaSupplier staticQuotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
+    private volatile QuotaFactorSupplier quotaFactorSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
     private volatile ScheduledFuture<?> dataSourceFuture;
 
     public StaticQuotaCallback() {
@@ -84,16 +84,9 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             return QuotaSupplier.UNLIMITED;
         }
 
-        // Don't allow producing messages if we're beyond the storage limit.
-        long currentStorageUsage = storageUsed.get();
         final double requestQuota = staticQuotaSupplier.quotaFor(quotaType, metricTags);
-        if (ClientQuotaType.PRODUCE.equals(quotaType) && currentStorageUsage > storageQuotaSoft && currentStorageUsage < storageQuotaHard) {
-            double limit = requestQuota * (1.0 - (1.0 * (currentStorageUsage - storageQuotaSoft) / (storageQuotaHard - storageQuotaSoft)));
-            maybeLog(lastLoggedMessageSoftTimeMs, "Throttling producer rate because disk is beyond soft limit. Used: {}. Quota: {}", storageUsed, limit);
-            return limit;
-        } else if (ClientQuotaType.PRODUCE.equals(quotaType) && currentStorageUsage >= storageQuotaHard) {
-            maybeLog(lastLoggedMessageHardTimeMs, "Limiting producer rate because disk is full. Used: {}. Limit: {}", storageUsed, storageQuotaHard);
-            return QuotaSupplier.PAUSED;
+        if (ClientQuotaType.PRODUCE.equals(quotaType)) {
+            return requestQuota * quotaFactorSupplier.get();
         }
         return requestQuota;
     }
@@ -156,7 +149,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @Override
     public void configure(Map<String, ?> configs) {
         StaticQuotaConfig config = new StaticQuotaConfig(configs, true);
-        staticQuotaSupplier = new StaticQuotaSupplier(config.getQuotaMap());
+        staticQuotaSupplier = config.quotaSupplier();
+        quotaFactorSupplier = config.quotaFactorSupplier();
         storageQuotaSoft = config.getSoftStorageQuota();
         storageQuotaHard = config.getHardStorageQuota();
         excludedPrincipalNameList = config.getExcludedPrincipalNameList();
@@ -171,11 +165,11 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             dataSourceFuture.cancel(false);
         }
         if (config.getStorageCheckInterval() > 0) {
-            final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, new Limit(Limit.LimitType.CONSUMED_BYTES, storageQuotaSoft), new Limit(Limit.LimitType.CONSUMED_BYTES, storageQuotaHard), config.getStorageCheckInterval(), "-1", snapshot -> {
-            });
+            final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, config.getSoftLimit(), config.getHardLimit(), config.getStorageCheckInterval(), config.getBrokerId(), config.volumeUsageMetricsPublisher());
             dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
         }
-        log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", quotaMap, storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);
+        //TODO This doesn't really make sense to log here any more, but is useful to have
+        log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", config.getQuotaMap(), storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);
         if (!excludedPrincipalNameList.isEmpty()) {
             log.info("Excluded principals {}", excludedPrincipalNameList);
         }
