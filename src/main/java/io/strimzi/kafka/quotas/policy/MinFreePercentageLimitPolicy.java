@@ -12,7 +12,11 @@ public class MinFreePercentageLimitPolicy implements LimitPolicy {
 
     //TODO Do we expect min free % to be 0..100 or 0.0..1.0
     public MinFreePercentageLimitPolicy(double minFreePercentage) {
-        this.minFreePercentage = minFreePercentage;
+        if (minFreePercentage <= 1.0) {
+            this.minFreePercentage = minFreePercentage;
+        } else {
+            this.minFreePercentage = minFreePercentage / 100;
+        }
     }
 
     @Override
@@ -29,7 +33,7 @@ public class MinFreePercentageLimitPolicy implements LimitPolicy {
 
     @Override
     public long getBreachQuantity(Volume volume) {
-        return getLimitInBytes(volume) -  getFreeSpace(volume);
+        return getLimitInBytes(volume) - getFreeSpace(volume);
     }
 
     private long getLimitInBytes(Volume volume) {

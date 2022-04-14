@@ -156,6 +156,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
     }
 
+    @SuppressWarnings("unchecked")
     @Override
     public void configure(Map<String, ?> configs) {
         StaticQuotaConfig config = pluginConfigFactory.apply(configs, true);
