@@ -4,10 +4,14 @@
  */
 package io.strimzi.kafka.quotas;
 
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.strimzi.kafka.quotas.distributed.KafkaQuotaFactorSupplier;
@@ -17,6 +21,7 @@ import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
@@ -118,7 +123,7 @@ public class StaticQuotaConfig extends AbstractConfig {
     List<String> getExcludedPrincipalNameList() {
         return getList(EXCLUDED_PRINCIPAL_NAME_LIST_PROP);
     }
-    
+
     public QuotaFactorSupplier quotaFactorSupplier() {
         final String factorUpdateTopicPattern = getString(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN);
         final KafkaConsumer<String, UpdateQuotaFactor> kafkaConsumer = new KafkaConsumer<>(getKafkaConfig(), new StringDeserializer(), new JacksonDeserializer<>(objectMapper, UpdateQuotaFactor.class));
@@ -127,6 +132,22 @@ public class StaticQuotaConfig extends AbstractConfig {
         //TODO should we really start here?
         kafkaQuotaFactorSupplier.start();
         return kafkaQuotaFactorSupplier;
+    }
+
+    public Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier() {
+        final String volumeUsageMetricsTopic = getString(VOLUME_USAGE_METRICS_TOPIC);
+        final KafkaConsumer<String, VolumeUsageMetrics> kafkaConsumer = new KafkaConsumer<>(getKafkaConfig(), new StringDeserializer(), new JacksonDeserializer<>(objectMapper, VolumeUsageMetrics.class));
+        //TODO who closes the consumer?
+        //TODO should we really subscribe here?
+        kafkaConsumer.subscribe(List.of(volumeUsageMetricsTopic));
+        return () -> {
+            final Iterable<ConsumerRecord<String, VolumeUsageMetrics>> records = kafkaConsumer.poll(Duration.of(10, ChronoUnit.SECONDS)).records(volumeUsageMetricsTopic);
+            List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
+            records.forEach(cr -> {
+                usageMetrics.add(cr.value());
+            });
+            return usageMetrics;
+        };
     }
 
     public QuotaSupplier quotaSupplier() {

@@ -9,6 +9,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+import io.strimzi.kafka.quotas.TestUtils;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.MockConsumer;
@@ -24,7 +25,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class KafkaQuotaFactorSupplierTest {
 
-    private static final Offset<Double> EPSILON = Offset.offset(0.00001);
+    private static final Offset<Double> EPSILON = Offset.offset(TestUtils.EPSILON);
     public static final String TEST_TOPIC = "testTopic";
     private MockConsumer<String, UpdateQuotaFactor> kafkaConsumer;
     private KafkaQuotaFactorSupplier kafkaQuotaFactorSupplier;

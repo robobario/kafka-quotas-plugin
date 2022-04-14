@@ -13,6 +13,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
@@ -259,6 +260,7 @@ class StaticQuotaCallbackTest {
     private StaticQuotaConfig spyOnQuotaConfig(Map<String, ?> config, Boolean doLog) {
         StaticQuotaConfig staticQuotaConfig = spy(new StaticQuotaConfig(config, doLog));
         lenient().doReturn(UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER).when(staticQuotaConfig).quotaFactorSupplier();
+        lenient().doReturn((Supplier<Iterable<VolumeUsageMetrics>>) List::of).when(staticQuotaConfig).volumeUsageMetricsSupplier();
         lenient().doReturn((Consumer<VolumeUsageMetrics>) volumeUsageMetrics -> {
         }).when(staticQuotaConfig).volumeUsageMetricsPublisher();
         return staticQuotaConfig;

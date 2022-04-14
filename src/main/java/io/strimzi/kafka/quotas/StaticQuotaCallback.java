@@ -21,6 +21,7 @@ import java.util.stream.Collectors;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.MetricName;
+import io.strimzi.kafka.quotas.local.QuotaPolicyTaskImpl;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.metrics.Quota;
@@ -173,6 +174,11 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         if (config.getStorageCheckInterval() > 0) {
             final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, config.getSoftLimit(), config.getHardLimit(), config.getStorageCheckInterval(), config.getBrokerId(), config.volumeUsageMetricsPublisher());
             dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
+        }
+        //TODO add separate poll interval for quota policy
+        if (config.getStorageCheckInterval() > 0) {
+            final QuotaPolicyTask fileSystemDataSourceTask = new QuotaPolicyTaskImpl(config.getStorageCheckInterval(), config.volumeUsageMetricsSupplier());
+//            dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
         }
         //TODO This doesn't really make sense to log here any more, but is useful to have
         log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", config.getQuotaMap(), storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);
