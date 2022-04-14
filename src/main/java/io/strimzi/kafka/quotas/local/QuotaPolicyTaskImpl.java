@@ -14,6 +14,8 @@ import java.util.function.Supplier;
 import io.strimzi.kafka.quotas.QuotaPolicyTask;
 import io.strimzi.kafka.quotas.policy.ConsumedBytesLimitPolicy;
 import io.strimzi.kafka.quotas.policy.LimitPolicy;
+import io.strimzi.kafka.quotas.policy.MinFreeBytesLimitPolicy;
+import io.strimzi.kafka.quotas.policy.MinFreePercentageLimitPolicy;
 import io.strimzi.kafka.quotas.policy.QuotaPolicy;
 import io.strimzi.kafka.quotas.policy.UnlimitedPolicy;
 import io.strimzi.kafka.quotas.types.Limit;
@@ -65,10 +67,8 @@ public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
     }
 
     QuotaPolicy mapLimitsToQuotaPolicy(VolumeUsageMetrics usageMetrics) {
-        final Limit softLimit = usageMetrics.getSoftLimit();
-        final Limit hardLimit = usageMetrics.getHardLimit();
-        LimitPolicy softLimitPolicy = mapToLimitPolicy(softLimit);
-        LimitPolicy hardLimitPolicy = mapToLimitPolicy(hardLimit);
+        LimitPolicy softLimitPolicy = mapToLimitPolicy(usageMetrics.getSoftLimit());
+        LimitPolicy hardLimitPolicy = mapToLimitPolicy(usageMetrics.getHardLimit());
         return new CombinedQuotaPolicy(softLimitPolicy, hardLimitPolicy);
     }
 
@@ -76,6 +76,10 @@ public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
         switch (limit.getLimitType()) {
             case CONSUMED_BYTES:
                 return new ConsumedBytesLimitPolicy(limit.getLevel());
+            case MIN_FREE_BYTES:
+                return new MinFreeBytesLimitPolicy(limit.getLevel());
+            case MIN_FREE_PERCENTAGE:
+                return new MinFreePercentageLimitPolicy(limit.getLevel());
             default:
                 return UnlimitedPolicy.INSTANCE;
         }
