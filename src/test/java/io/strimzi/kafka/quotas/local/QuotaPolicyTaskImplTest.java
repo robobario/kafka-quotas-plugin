@@ -37,7 +37,7 @@ class QuotaPolicyTaskImplTest {
         //Given
         final double expectedFactor = 0.4;
         final Double[] updates = new Double[1];
-        quotaPolicyTask.addListener(aDouble -> updates[0] = aDouble);
+        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
         quotaPolicyTask.run();
@@ -52,7 +52,7 @@ class QuotaPolicyTaskImplTest {
         volumeUsageMetrics = generateUsageMetrics(TestUtils.newVolumeWith(HARD_LIMIT));
         final double expectedFactor = 0.0;
         final Double[] updates = new Double[1];
-        quotaPolicyTask.addListener(aDouble -> updates[0] = aDouble);
+        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
         quotaPolicyTask.run();
@@ -69,7 +69,7 @@ class QuotaPolicyTaskImplTest {
         final double expectedFactor = 0.0;
         final Double[] updates = new Double[1];
         quotaPolicyTask = new QuotaPolicyTaskImpl(10, () -> List.of(brokerAMetrics, brokerBMetrics));
-        quotaPolicyTask.addListener(aDouble -> updates[0] = aDouble);
+        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
         quotaPolicyTask.run();
@@ -84,7 +84,7 @@ class QuotaPolicyTaskImplTest {
         volumeUsageMetrics = generateUsageMetrics(TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(8L));
         final double expectedFactor = 0.4;
         final Double[] updates = new Double[1];
-        quotaPolicyTask.addListener(aDouble -> updates[0] = aDouble);
+        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
         quotaPolicyTask.run();
@@ -101,7 +101,7 @@ class QuotaPolicyTaskImplTest {
         final double expectedFactor = 0.4;
         final Double[] updates = new Double[1];
         quotaPolicyTask = new QuotaPolicyTaskImpl(10, () -> List.of(brokerAMetrics, brokerBMetrics));
-        quotaPolicyTask.addListener(aDouble -> updates[0] = aDouble);
+        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
         quotaPolicyTask.run();

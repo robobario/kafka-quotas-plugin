@@ -16,6 +16,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import com.yammer.metrics.Metrics;
@@ -23,6 +24,7 @@ import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.MetricName;
 import io.strimzi.kafka.quotas.local.QuotaPolicyTaskImpl;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
+import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -56,7 +58,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     //Default to no restrictions until things have been configured.
     private volatile QuotaSupplier staticQuotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
     private volatile QuotaFactorSupplier quotaFactorSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
-    private volatile ScheduledFuture<?> dataSourceFuture;
+    private ScheduledFuture<?> dataSourceFuture;
+    private ScheduledFuture<?> quotaPolicyFuture;
 
     public StaticQuotaCallback() {
         this(new StorageChecker(),
@@ -175,10 +178,17 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, config.getSoftLimit(), config.getHardLimit(), config.getStorageCheckInterval(), config.getBrokerId(), config.volumeUsageMetricsPublisher());
             dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
         }
+
+        if (quotaPolicyFuture != null) {
+            quotaPolicyFuture.cancel(false);
+        }
         //TODO add separate poll interval for quota policy
         if (config.getStorageCheckInterval() > 0) {
-            final QuotaPolicyTask fileSystemDataSourceTask = new QuotaPolicyTaskImpl(config.getStorageCheckInterval(), config.volumeUsageMetricsSupplier());
-//            dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
+            final QuotaPolicyTask quotaPolicyTask = new QuotaPolicyTaskImpl(config.getStorageCheckInterval(), config.volumeUsageMetricsSupplier());
+            if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
+                quotaPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
+            }
+            quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 0, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
         }
         //TODO This doesn't really make sense to log here any more, but is useful to have
         log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", config.getQuotaMap(), storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);

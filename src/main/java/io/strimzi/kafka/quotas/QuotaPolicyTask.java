@@ -8,10 +8,12 @@ package io.strimzi.kafka.quotas;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
+import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
+
 public interface QuotaPolicyTask extends Runnable {
     long getPeriod();
 
     TimeUnit getPeriodUnit();
 
-    void addListener(Consumer<Double> quotaFactorConsumer);
+    void addListener(Consumer<UpdateQuotaFactor> quotaFactorConsumer);
 }

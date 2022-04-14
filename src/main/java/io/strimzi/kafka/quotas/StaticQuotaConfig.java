@@ -14,12 +14,11 @@ import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.strimzi.kafka.quotas.distributed.KafkaQuotaFactorSupplier;
 import io.strimzi.kafka.quotas.json.JacksonDeserializer;
 import io.strimzi.kafka.quotas.json.JacksonSerializer;
+import io.strimzi.kafka.quotas.local.InMemoryQuotaFactorSupplier;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.types.Limit;
-import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
@@ -125,13 +124,14 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     public QuotaFactorSupplier quotaFactorSupplier() {
-        final String factorUpdateTopicPattern = getString(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN);
-        final KafkaConsumer<String, UpdateQuotaFactor> kafkaConsumer = new KafkaConsumer<>(getKafkaConfig(), new StringDeserializer(), new JacksonDeserializer<>(objectMapper, UpdateQuotaFactor.class));
-        //TODO who closes the consumer?
-        final KafkaQuotaFactorSupplier kafkaQuotaFactorSupplier = new KafkaQuotaFactorSupplier(factorUpdateTopicPattern, kafkaConsumer);
-        //TODO should we really start here?
-        kafkaQuotaFactorSupplier.start();
-        return kafkaQuotaFactorSupplier;
+        return new InMemoryQuotaFactorSupplier();
+//        final String factorUpdateTopicPattern = getString(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN);
+//        final KafkaConsumer<String, UpdateQuotaFactor> kafkaConsumer = new KafkaConsumer<>(getKafkaConfig(), new StringDeserializer(), new JacksonDeserializer<>(objectMapper, UpdateQuotaFactor.class));
+//        //TODO who closes the consumer?
+//        final KafkaQuotaFactorSupplier kafkaQuotaFactorSupplier = new KafkaQuotaFactorSupplier(factorUpdateTopicPattern, kafkaConsumer);
+//        //TODO should we really start here?
+//        kafkaQuotaFactorSupplier.start();
+//        return kafkaQuotaFactorSupplier;
     }
 
     public Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier() {
