@@ -184,8 +184,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             quotaPolicyFuture.cancel(false);
         }
         //TODO add separate poll interval for quota policy
-        if (config.getStorageCheckInterval() > 0) {
-            final QuotaPolicyTask quotaPolicyTask = new QuotaPolicyTaskImpl(config.getStorageCheckInterval(), config.volumeUsageMetricsSupplier());
+        if (config.getQuotaPolicyInterval() > 0) {
+            final QuotaPolicyTask quotaPolicyTask = new QuotaPolicyTaskImpl(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier());
             if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
                 quotaPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }

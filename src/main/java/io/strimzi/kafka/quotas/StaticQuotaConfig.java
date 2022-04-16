@@ -51,11 +51,9 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String STORAGE_QUOTA_SOFT_PROP = "client.quota.callback.static.storage.soft";
     static final String STORAGE_QUOTA_HARD_PROP = "client.quota.callback.static.storage.hard";
     static final String STORAGE_CHECK_INTERVAL_PROP = "client.quota.callback.static.storage.check-interval";
-
+    static final String QUOTA_POLICY_INTERVAL_PROP = "client.quota.callback.quotaPolicy.check-interval";
     static final String QUOTA_FACTOR_UPDATE_TOPIC_PATTERN = "client.quota.callback.quotaFactor.topicPattern";
-
     static final String VOLUME_USAGE_METRICS_TOPIC = "client.quota.callback.usageMetrics.topic";
-
     static final String LOG_DIRS_PROP = "log.dirs";
     private final ObjectMapper objectMapper;
 
@@ -74,6 +72,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(STORAGE_QUOTA_SOFT_PROP, LONG, Long.MAX_VALUE, HIGH, "Hard limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_QUOTA_HARD_PROP, LONG, Long.MAX_VALUE, HIGH, "Soft limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_CHECK_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between storage check runs (in seconds, default of 0 means disabled")
+                        .define(QUOTA_POLICY_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between quota policy runs (in seconds, default of 0 means disabled")
                         .define(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN, STRING, "__strimzi_quotaFactorUpdate", LOW, "topic used to update new quota factors to apply to requests")
                         .define(VOLUME_USAGE_METRICS_TOPIC, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
@@ -113,6 +112,10 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     int getStorageCheckInterval() {
         return getInt(STORAGE_CHECK_INTERVAL_PROP);
+    }
+
+    int getQuotaPolicyInterval() {
+        return getInt(QUOTA_POLICY_INTERVAL_PROP);
     }
 
     List<String> getLogDirs() {

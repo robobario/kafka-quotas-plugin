@@ -30,6 +30,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static io.strimzi.kafka.quotas.StaticQuotaConfig.QUOTA_POLICY_INTERVAL_PROP;
 import static io.strimzi.kafka.quotas.StaticQuotaConfig.STORAGE_CHECK_INTERVAL_PROP;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -38,6 +39,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isA;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
@@ -205,7 +207,7 @@ class StaticQuotaCallbackTest {
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval.intValue()));
 
         //Then
-        verify(executorService).scheduleWithFixedDelay(any(Runnable.class), eq(0L), eq(interval), eq(TimeUnit.SECONDS));
+        verify(executorService).scheduleWithFixedDelay(isA(DataSourceTask.class), eq(0L), eq(interval), eq(TimeUnit.SECONDS));
     }
 
     @Test
@@ -214,12 +216,55 @@ class StaticQuotaCallbackTest {
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
         final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
         final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
-        doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(any(), anyLong(), anyLong(), any());
+        doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(DataSourceTask.class), anyLong(), anyLong(), any());
         final int interval = 10;
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
 
         //When
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
+
+        //Then
+        verify(scheduledFuture).cancel(false);
+    }
+    @Test
+    void shouldNotScheduleQuotaPolicyTask() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+
+        //When
+        staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, 0));
+
+        //Then
+        verifyNoInteractions(executorService);
+    }
+
+    @Test
+    void shouldScheduleQuotaPolicyTask() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final Long interval = 10L;
+
+        //When
+        staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, interval.intValue()));
+
+        //Then
+        verify(executorService).scheduleWithFixedDelay(isA(QuotaPolicyTask.class), eq(0L), eq(interval), eq(TimeUnit.SECONDS));
+    }
+
+    @Test
+    void shouldCancelExistingScheduleQuotaPolicyTask() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(QuotaPolicyTask.class), anyLong(), anyLong(), any());
+        final int interval = 10;
+        staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, interval));
+
+        //When
+        staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, interval));
 
         //Then
         verify(scheduledFuture).cancel(false);
