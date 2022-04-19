@@ -159,6 +159,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @SuppressWarnings("unchecked")
     @Override
     public void configure(Map<String, ?> configs) {
+        //TODO config object is shot lived so it can't manage kafka sessions :(
         StaticQuotaConfig config = pluginConfigFactory.apply(configs, true);
         staticQuotaSupplier = config.quotaSupplier();
         quotaFactorSupplier = config.quotaFactorSupplier();
@@ -185,7 +186,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
         //TODO add separate poll interval for quota policy
         if (config.getQuotaPolicyInterval() > 0) {
-            final QuotaPolicyTask quotaPolicyTask = new QuotaPolicyTaskImpl(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier());
+            final QuotaPolicyTask quotaPolicyTask = new QuotaPolicyTaskImpl(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier());
             if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
                 quotaPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }

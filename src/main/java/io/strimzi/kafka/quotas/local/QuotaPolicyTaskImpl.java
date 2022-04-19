@@ -7,7 +7,10 @@ package io.strimzi.kafka.quotas.local;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -27,11 +30,16 @@ import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
     private final int periodInSeconds;
     private final Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier;
+    private final Supplier<Collection<String>> activeBrokerIdsSupplier;
     private final List<Consumer<UpdateQuotaFactor>> updateListeners = new ArrayList<>();
 
-    public QuotaPolicyTaskImpl(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier) {
+    private final ConcurrentMap<String, VolumeUsageMetrics> mostRecentMetricsPerBroker;
+
+    public QuotaPolicyTaskImpl(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier, Supplier<Collection<String>> activeBrokerIdsSupplier) {
         this.periodInSeconds = periodInSeconds;
         this.volumeUsageMetricsSupplier = volumeUsageMetricsSupplier;
+        this.activeBrokerIdsSupplier = activeBrokerIdsSupplier;
+        mostRecentMetricsPerBroker = new ConcurrentHashMap<>();
     }
 
     @Override
@@ -51,9 +59,20 @@ public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
 
     @Override
     public void run() {
-        final Iterable<VolumeUsageMetrics> volumeUsageMetrics = volumeUsageMetricsSupplier.get();
         double quotaFactor = 0.0D;
-        for (VolumeUsageMetrics brokerSnapshot : volumeUsageMetrics) {
+        for (VolumeUsageMetrics metricsUpdate : volumeUsageMetricsSupplier.get()) {
+            final VolumeUsageMetrics lastKnown = mostRecentMetricsPerBroker.putIfAbsent(metricsUpdate.getBrokerId(), metricsUpdate);
+            if (lastKnown != null && metricsUpdate.getSnapshotAt().isAfter(lastKnown.getSnapshotAt())) {
+                //TODO handle replace == false
+                mostRecentMetricsPerBroker.replace(metricsUpdate.getBrokerId(), lastKnown, metricsUpdate);
+            }
+        }
+        for (String brokerId : activeBrokerIdsSupplier.get()) {
+            final VolumeUsageMetrics brokerSnapshot = mostRecentMetricsPerBroker.get(brokerId);
+            if (brokerSnapshot == null) {
+                quotaFactor = 1.0D;
+                break;
+            }
             final QuotaPolicy quotaPolicy = mapLimitsToQuotaPolicy(brokerSnapshot);
             for (Volume volume : brokerSnapshot.getVolumes()) {
                 if (quotaPolicy.breachesHardLimit(volume)) {
@@ -63,8 +82,9 @@ public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
                 quotaFactor = Math.max(quotaFactor, quotaPolicy.quotaFactor(volume));
             }
         }
+        quotaFactor = 1.0 - quotaFactor;
         for (Consumer<UpdateQuotaFactor> updateListener : updateListeners) {
-            updateListener.accept(new UpdateQuotaFactor(Instant.now(), 1.0 - quotaFactor));
+            updateListener.accept(new UpdateQuotaFactor(Instant.now(), quotaFactor));
         }
     }
 

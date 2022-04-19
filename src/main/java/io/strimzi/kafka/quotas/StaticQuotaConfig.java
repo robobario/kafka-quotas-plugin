@@ -9,10 +9,15 @@ import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -25,12 +30,13 @@ import io.strimzi.kafka.quotas.local.InMemoryQuotaFactorSupplier;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
-import org.apache.kafka.clients.admin.AdminClientConfig;
+import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.Node;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.SslConfigs;
@@ -157,19 +163,24 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     public Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier() {
+        return rawKafkaConsumer();
+    }
+
+    private Supplier<Iterable<VolumeUsageMetrics>> rawKafkaConsumer() {
         final String volumeUsageMetricsTopic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
         final Map<String, Object> consumerConfig = getKafkaConfig();
         consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG, "TODO");
         final KafkaConsumer<String, VolumeUsageMetrics> kafkaConsumer = new KafkaConsumer<>(consumerConfig, new StringDeserializer(), new JacksonDeserializer<>(objectMapper, VolumeUsageMetrics.class));
-        //TODO who closes the consumer?
+        //TODO lifecycle management
+        //TODO connection status metrics
         //TODO should we really subscribe here?
         kafkaConsumer.subscribe(List.of(volumeUsageMetricsTopic));
         return () -> {
-            final Iterable<ConsumerRecord<String, VolumeUsageMetrics>> records = kafkaConsumer.poll(Duration.of(10, ChronoUnit.SECONDS)).records(volumeUsageMetricsTopic);
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
-            records.forEach(cr -> {
-                usageMetrics.add(cr.value());
-            });
+            //TODO nasty doing this in the supplier should really be done async
+            kafkaConsumer.poll(Duration.of(10, ChronoUnit.SECONDS))
+                    .records(volumeUsageMetricsTopic)
+                    .forEach(cr -> usageMetrics.add(cr.value()));
             return usageMetrics;
         };
     }
@@ -185,10 +196,30 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     public Consumer<VolumeUsageMetrics> volumeUsageMetricsPublisher() {
+        //TODO lifecycle management
+        //TODO connection status metrics
         final KafkaProducer<String, VolumeUsageMetrics> kafkaProducer = new KafkaProducer<>(getKafkaConfig(), new StringSerializer(), new JacksonSerializer<>(objectMapper));
         final String brokerId = getBrokerId();
         final String topic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
         return snapshot -> kafkaProducer.send(new ProducerRecord<>(topic, brokerId, snapshot));
+    }
+
+    public Supplier<Collection<String>> activeBrokerSupplier() {
+        //TODO admin life cycle
+        //TODO connection status metrics
+        final Admin admin = Admin.create(getKafkaConfig());
+        return () -> {
+            try {
+                return admin.describeCluster().nodes().thenApply(nodes -> nodes.stream().map(Node::idString).collect(Collectors.toSet())).get(1, TimeUnit.SECONDS);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("unable to get current set of active brokers: {}", e.getMessage(), e);
+                return Set.of();
+            } catch (ExecutionException | TimeoutException e) {
+                log.warn("unable to get current set of active brokers: {}", e.getMessage(), e);
+                return Set.of();
+            }
+        };
     }
 
     private Map<String, Object> getKafkaConfig() {
@@ -207,8 +238,8 @@ public class StaticQuotaConfig extends AbstractConfig {
                                 })
                                 .filter(e -> !"".equals(e.getValue())),
                         Stream.of(
-                                Map.entry(AdminClientConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapAddress),
-                                Map.entry(AdminClientConfig.SECURITY_PROTOCOL_CONFIG, getString(LISTENER_PROTOCOL_PROP))))
+                                Map.entry(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapAddress),
+                                Map.entry(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getString(LISTENER_PROTOCOL_PROP))))
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
                         Map.Entry::getValue));
