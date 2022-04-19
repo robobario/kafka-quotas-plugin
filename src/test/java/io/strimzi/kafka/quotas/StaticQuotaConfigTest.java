@@ -48,6 +48,19 @@ class StaticQuotaConfigTest {
     @SetSystemProperty(key = "broker.id", value = "2")
     void shouldUseConfiguredBrokerId() {
         //Given
+        final StaticQuotaConfig staticQuotaConfig = new StaticQuotaConfig(Map.of("broker.id", "1"), false);
+
+        //When
+        final String actualBrokerId = staticQuotaConfig.getBrokerId();
+
+        //Then
+        assertThat(actualBrokerId).isEqualTo("1");
+    }
+
+    @Test
+    @SetSystemProperty(key = "broker.id", value = "2")
+    void shouldFallbackToSystemPropertiesBrokerId() {
+        //Given
         final StaticQuotaConfig staticQuotaConfig = new StaticQuotaConfig(Map.of(), false);
 
         //When
