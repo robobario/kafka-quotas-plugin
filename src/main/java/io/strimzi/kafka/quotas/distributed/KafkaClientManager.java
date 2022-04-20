@@ -27,6 +27,9 @@ public class KafkaClientManager implements Closeable, Configurable {
 
     private final ConcurrentMap<Class<?>, Consumer<String, ?>> consumersByType;
 
+    //using a map for computeIfAbsent semantics.
+    private final ConcurrentMap<Class<Admin>, Admin> adminClientHolder;
+
     private final Function<KafkaClientConfig, KafkaClientFactory> kafkaClientFactorySupplier;
 
     private final Logger log = getLogger(KafkaClientManager.class);
@@ -39,6 +42,7 @@ public class KafkaClientManager implements Closeable, Configurable {
     KafkaClientManager(Function<KafkaClientConfig, KafkaClientFactory> kafkaClientFactorySupplier) {
         producersByType = new ConcurrentHashMap<>();
         consumersByType = new ConcurrentHashMap<>();
+        adminClientHolder = new ConcurrentHashMap<>(1);
         this.kafkaClientFactorySupplier = kafkaClientFactorySupplier;
     }
 
@@ -57,6 +61,11 @@ public class KafkaClientManager implements Closeable, Configurable {
             } catch (Exception e) {
                 log.warn("caught exception closing consumer. Continuing to closing others: {}", e.getMessage(), e);
             }
+        }
+        try {
+            adminClientHolder.get(Admin.class).close();
+        } catch (Exception e) {
+            log.warn("caught exception closing consumer. Continuing to closing others: {}", e.getMessage(), e);
         }
     }
 
@@ -93,6 +102,6 @@ public class KafkaClientManager implements Closeable, Configurable {
 
     public Admin adminClient() {
         //TODO connection status metrics
-        return Admin.create(kafkaClientFactory.getBaseKafkaConfig());
+        return adminClientHolder.computeIfAbsent(Admin.class, key -> kafkaClientFactory.newAdmin());
     }
 }

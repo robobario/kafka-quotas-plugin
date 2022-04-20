@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.strimzi.kafka.quotas.json.JacksonDeserializer;
 import io.strimzi.kafka.quotas.json.JacksonSerializer;
 import org.apache.kafka.clients.CommonClientConfigs;
+import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
@@ -53,6 +54,10 @@ public class KafkaClientFactory {
     
     public <V> Consumer<String, V> newConsumer(Map<String, Object> kafkaConfig, Class<V> messageType) {
         return new KafkaConsumer<>(kafkaConfig, keyDeserializer, new JacksonDeserializer<>(objectMapper, messageType));
+    }
+
+    public Admin newAdmin() {
+        return Admin.create(getBaseKafkaConfig());
     }
 
     public Map<String, Object> getBaseKafkaConfig() {

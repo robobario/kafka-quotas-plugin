@@ -10,6 +10,7 @@ import java.util.Map;
 
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
+import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.producer.Producer;
 import org.junit.jupiter.api.AfterEach;
@@ -40,14 +41,18 @@ class KafkaClientManagerTest {
     Producer<String, VolumeUsageMetrics> producer;
     @Mock(lenient = true)
     Consumer<String, VolumeUsageMetrics> consumer;
+    @Mock(lenient = true)
+    Admin adminClient;
 
     @SuppressWarnings("resource")
     @BeforeEach
     void setUp() {
         doReturn(producer).when(kafkaClientFactory).newProducer(anyMap(), eq(VolumeUsageMetrics.class));
         doReturn(consumer).when(kafkaClientFactory).newConsumer(anyMap(), eq(VolumeUsageMetrics.class));
+        doReturn(adminClient).when(kafkaClientFactory).newAdmin();
 
         kafkaClientManager = new KafkaClientManager(kafkaClientConfig -> kafkaClientFactory);
+        kafkaClientManager.configure(Map.of(LISTENER_PORT_PROP, 9091));
     }
 
     @AfterEach
@@ -60,6 +65,7 @@ class KafkaClientManagerTest {
     @Test
     void shouldNotCreateProducerWithOutConfig() {
         //Given
+        kafkaClientManager = new KafkaClientManager(kafkaClientConfig -> kafkaClientFactory);
 
         //When
         final Producer<String, VolumeUsageMetrics> producer = kafkaClientManager.producer(VolumeUsageMetrics.class);
@@ -71,6 +77,7 @@ class KafkaClientManagerTest {
     @Test
     void shouldNotCreateConsumerWithOutConfig() {
         //Given
+        kafkaClientManager = new KafkaClientManager(kafkaClientConfig -> kafkaClientFactory);
 
         //When
         final Consumer<String, VolumeUsageMetrics> consumer = kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
@@ -82,7 +89,6 @@ class KafkaClientManagerTest {
     @Test
     void shouldReuseProducer() {
         //Given
-        kafkaClientManager.configure(Map.of(LISTENER_PORT_PROP, 9091));
         final Producer<String, VolumeUsageMetrics> initialProducer = kafkaClientManager.producer(VolumeUsageMetrics.class);
         assertThat(initialProducer).isNotNull();
 
@@ -96,7 +102,6 @@ class KafkaClientManagerTest {
     @Test
     void shouldReuseConsumer() {
         //Given
-        kafkaClientManager.configure(Map.of(LISTENER_PORT_PROP, 9091));
         final Consumer<String, VolumeUsageMetrics> initialConsumer = kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
         assertThat(initialConsumer).isNotNull();
 
@@ -107,11 +112,23 @@ class KafkaClientManagerTest {
         assertThat(subsequentConsumer).isSameAs(initialConsumer);
     }
 
+    @Test
+    void shouldReuseAdminClient() {
+        //Given
+        final Admin initialAdminClient = kafkaClientManager.adminClient();
+        assertThat(initialAdminClient).isNotNull();
+
+        //When
+        final Admin subsequentAdminClient = kafkaClientManager.adminClient();
+
+        //Then
+        assertThat(subsequentAdminClient).isSameAs(initialAdminClient);
+    }
+
     @SuppressWarnings({"rawtypes", "resource"})
     @Test
     void shouldNotProducerForDifferentMessageTypes() {
         //Given
-        kafkaClientManager.configure(Map.of(LISTENER_PORT_PROP, 9091));
         doReturn(mock(Producer.class)).when(kafkaClientFactory).newProducer(anyMap(), eq(UpdateQuotaFactor.class));
         //Use the raw type so the producers are actually testable.
         //Arguably a redundant test due to the type system but...
@@ -129,7 +146,6 @@ class KafkaClientManagerTest {
     @SuppressWarnings({"rawtypes", "resource"})
     void shouldNotReuseConsumerForDifferentMessageTypes() {
         //Given
-        kafkaClientManager.configure(Map.of(LISTENER_PORT_PROP, 9091));
         doReturn(mock(Consumer.class)).when(kafkaClientFactory).newConsumer(anyMap(), eq(UpdateQuotaFactor.class));
         //Use the raw type so the producers are actually testable.
         //Arguably a redundant test due to the type system but...
@@ -146,7 +162,6 @@ class KafkaClientManagerTest {
     @Test
     void shouldCloseProducer() throws IOException {
         //Given
-        kafkaClientManager.configure(Map.of(LISTENER_PORT_PROP, 9091));
         kafkaClientManager.producer(VolumeUsageMetrics.class);
 
         //When
@@ -159,7 +174,6 @@ class KafkaClientManagerTest {
     @Test
     void shouldCloseConsumer() throws IOException {
         //Given
-        kafkaClientManager.configure(Map.of(LISTENER_PORT_PROP, 9091));
         kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
 
         //When
@@ -167,5 +181,17 @@ class KafkaClientManagerTest {
 
         //Then
         verify(consumer).close();
+    }
+
+    @Test
+    void shouldCloseAdminClient() throws IOException {
+        //Given
+        kafkaClientManager.adminClient();
+
+        //When
+        kafkaClientManager.close();
+
+        //Then
+        verify(adminClient).close();
     }
 }
