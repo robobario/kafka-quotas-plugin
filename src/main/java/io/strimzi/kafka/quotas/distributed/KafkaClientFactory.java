@@ -86,7 +86,7 @@ public class KafkaClientFactory {
             hostname = InetAddress.getLocalHost().getCanonicalHostName();
         } catch (UnknownHostException e) {
             log.warn("Unable to get canonical hostname for localhost: {} defaulting to 127.0.0.1:{}", e.getMessage(), listenerPort, e);
-            hostname = "217.0.0.1";
+            hostname = "127.0.0.1";
         }
         return String.format("%s:%s", hostname, listenerPort);
     }
