@@ -4,8 +4,6 @@
  */
 package io.strimzi.kafka.quotas;
 
-import java.net.InetAddress;
-import java.net.UnknownHostException;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -13,7 +11,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -21,28 +18,19 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import io.strimzi.kafka.quotas.json.JacksonDeserializer;
-import io.strimzi.kafka.quotas.json.JacksonSerializer;
+import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.InMemoryQuotaFactorSupplier;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
-import org.apache.kafka.clients.CommonClientConfigs;
 import org.apache.kafka.clients.admin.Admin;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.KafkaProducer;
+import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
-import org.apache.kafka.common.config.SslConfigs;
 import org.apache.kafka.common.metrics.Quota;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.apache.kafka.server.quota.ClientQuotaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,20 +58,17 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String QUOTA_POLICY_INTERVAL_PROP = "client.quota.callback.quotaPolicy.check-interval";
     static final String QUOTA_FACTOR_UPDATE_TOPIC_PATTERN_PROP = "client.quota.callback.quotaFactor.topicPattern";
     static final String VOLUME_USAGE_METRICS_TOPIC_PROP = "client.quota.callback.usageMetrics.topic";
-    //TODO DO we really need a name prop
-    static final String LISTENER_NAME_PROP = "client.quota.callback.kafka.listener.name";
-    static final String LISTENER_PORT_PROP = "client.quota.callback.kafka.listener.port";
-    static final String LISTENER_PROTOCOL_PROP = "client.quota.callback.kafka.listener.protocol";
+
     static final String LOG_DIRS_PROP = "log.dirs";
-    private final ObjectMapper objectMapper;
 
     private final Logger log = LoggerFactory.getLogger(StaticQuotaConfig.class);
+    private KafkaClientManager kafkaClientManager;
 
     /**
      * Construct a configuration for the static quota plugin.
      *
-     * @param props the configuration properties
-     * @param doLog whether the configurations should be logged
+     * @param props              the configuration properties
+     * @param doLog              whether the configurations should be logged
      */
     public StaticQuotaConfig(Map<String, ?> props, boolean doLog) {
         super(new ConfigDef()
@@ -97,13 +82,14 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(QUOTA_POLICY_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between quota policy runs (in seconds, default of 0 means disabled")
                         .define(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN_PROP, STRING, "__strimzi_quotaFactorUpdate", LOW, "topic used to update new quota factors to apply to requests")
                         .define(VOLUME_USAGE_METRICS_TOPIC_PROP, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
-                        .define(LISTENER_NAME_PROP, STRING, "replication-9091", LOW, "which listener to connect to")
-                        .define(LISTENER_PORT_PROP, INT, 9091, LOW, "which port to connect to the listener on")
-                        .define(LISTENER_PROTOCOL_PROP, STRING, "SSL", LOW, "what protocol to use when connecting to the listener listener")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
                 props,
                 doLog);
-        objectMapper = new ObjectMapper();
+    }
+
+    public StaticQuotaConfig withKafkaClientManager(KafkaClientManager kafkaClientManager) {
+        this.kafkaClientManager = kafkaClientManager;
+        return this;
     }
 
     Map<ClientQuotaType, Quota> getQuotaMap() {
@@ -168,13 +154,7 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     private Supplier<Iterable<VolumeUsageMetrics>> rawKafkaConsumer() {
         final String volumeUsageMetricsTopic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
-        final Map<String, Object> consumerConfig = getKafkaConfig();
-        consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG, "TODO");
-        final KafkaConsumer<String, VolumeUsageMetrics> kafkaConsumer = new KafkaConsumer<>(consumerConfig, new StringDeserializer(), new JacksonDeserializer<>(objectMapper, VolumeUsageMetrics.class));
-        //TODO lifecycle management
-        //TODO connection status metrics
-        //TODO should we really subscribe here?
-        kafkaConsumer.subscribe(List.of(volumeUsageMetricsTopic));
+        final  org.apache.kafka.clients.consumer.Consumer<String, VolumeUsageMetrics> kafkaConsumer = kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class);
         return () -> {
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
             //TODO nasty doing this in the supplier should really be done async
@@ -192,22 +172,20 @@ public class StaticQuotaConfig extends AbstractConfig {
     public String getBrokerId() {
         //Arguably in-efficient to look up the sys prop if we don't need it, but it reads better and is invoked rarely
         final String brokerIdFromSysProps = System.getProperty("broker.id", "-1");
-        return getOriginalConfigString("broker.id", brokerIdFromSysProps);
+        return (String) originals().getOrDefault("broker.id", brokerIdFromSysProps);
     }
 
     public Consumer<VolumeUsageMetrics> volumeUsageMetricsPublisher() {
         //TODO lifecycle management
         //TODO connection status metrics
-        final KafkaProducer<String, VolumeUsageMetrics> kafkaProducer = new KafkaProducer<>(getKafkaConfig(), new StringSerializer(), new JacksonSerializer<>(objectMapper));
+        Producer<String, VolumeUsageMetrics> kafkaProducer = kafkaClientManager.producer(VolumeUsageMetrics.class);
         final String brokerId = getBrokerId();
         final String topic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
         return snapshot -> kafkaProducer.send(new ProducerRecord<>(topic, brokerId, snapshot));
     }
 
     public Supplier<Collection<String>> activeBrokerSupplier() {
-        //TODO admin life cycle
-        //TODO connection status metrics
-        final Admin admin = Admin.create(getKafkaConfig());
+        final Admin admin = kafkaClientManager.adminClient();
         return () -> {
             try {
                 return admin.describeCluster().nodes().thenApply(nodes -> nodes.stream().map(Node::idString).collect(Collectors.toSet())).get(1, TimeUnit.SECONDS);
@@ -220,51 +198,6 @@ public class StaticQuotaConfig extends AbstractConfig {
                 return Set.of();
             }
         };
-    }
-
-    private Map<String, Object> getKafkaConfig() {
-        final String bootstrapAddress = getBootstrapAddress();
-
-        final Map<String, Object> configuredProperties = Stream.concat(Stream.of(
-                                        SslConfigs.SSL_KEYSTORE_LOCATION_CONFIG,
-                                        SslConfigs.SSL_KEYSTORE_PASSWORD_CONFIG,
-                                        SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG,
-                                        SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
-                                .map(p -> {
-                                    String configKey =
-                                            String.format("listener.name.%s.%s", getInt(LISTENER_PORT_PROP), p);
-                                    String v = getOriginalConfigString(configKey);
-                                    return Map.entry(p, Objects.requireNonNullElse(v, ""));
-                                })
-                                .filter(e -> !"".equals(e.getValue())),
-                        Stream.of(
-                                Map.entry(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapAddress),
-                                Map.entry(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, getString(LISTENER_PROTOCOL_PROP))))
-                .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        Map.Entry::getValue));
-        log.info("resolved kafka config of {}", configuredProperties);
-        return configuredProperties;
-    }
-
-    private String getOriginalConfigString(String configKey) {
-        return (String) originals().get(configKey);
-    }
-
-    private String getOriginalConfigString(String configKey, String defaultValue) {
-        return (String) originals().getOrDefault(configKey, defaultValue);
-    }
-
-    private String getBootstrapAddress() {
-        final Integer listenerPort = getInt(LISTENER_PORT_PROP);
-        String hostname;
-        try {
-            hostname = InetAddress.getLocalHost().getCanonicalHostName();
-        } catch (UnknownHostException e) {
-            log.warn("Unable to get canonical hostname for localhost: {} defaulting to 127.0.0.1:{}", e.getMessage(), listenerPort, e);
-            hostname = "217.0.0.1";
-        }
-        return String.format("%s:%s", hostname, listenerPort);
     }
 }
 

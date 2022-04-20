@@ -16,6 +16,7 @@ public class JacksonSerializer<T> implements Serializer<T> {
     public static final byte[] EMPTY_BYTE_ARRAY = {};
     private final ObjectMapper objectMapper;
     private final Logger log = getLogger(JacksonSerializer.class);
+
     public JacksonSerializer(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }

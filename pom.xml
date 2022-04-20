@@ -19,7 +19,7 @@
         configuration.
     </description>
     <url>https://strimzi.io/</url>
-
+    <!-- TODO make sure target/generated-sources is properly configured as a source path -->
     <scm>
         <connection>scm:git:git://github.com/strimzi/kafka-quotas-plugin.git</connection>
         <developerConnection>scm:git:ssh://github.com:strimzi/kafka-quotas-plugin.git</developerConnection>

@@ -7,15 +7,22 @@ package io.strimzi.kafka.quotas;
 
 import java.util.Map;
 
+import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.types.Limit;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.junitpioneer.jupiter.ClearSystemProperty;
 import org.junitpioneer.jupiter.SetSystemProperty;
+import org.mockito.Mock;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+@ExtendWith(MockitoExtension.class)
 class StaticQuotaConfigTest {
 
+    @Mock(lenient = true)
+    private KafkaClientManager kafkaClientManager;
     public static final int LIMIT_BYTES = 10000;
 
     @Test

@@ -4,6 +4,7 @@
  */
 package io.strimzi.kafka.quotas;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -19,6 +20,7 @@ import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Metric;
 import com.yammer.metrics.core.MetricName;
+import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
@@ -28,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static io.strimzi.kafka.quotas.StaticQuotaConfig.QUOTA_POLICY_INTERVAL_PROP;
@@ -54,10 +57,12 @@ import static org.mockito.Mockito.when;
 class StaticQuotaCallbackTest {
 
     StaticQuotaCallback target;
+    @Mock(lenient = true)
+    private KafkaClientManager kafkaClientManager;
 
     @BeforeEach
     void setup() {
-        target = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig);
+        target = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
     }
 
     @AfterEach
@@ -102,7 +107,7 @@ class StaticQuotaCallbackTest {
     @Test
     void pluginLifecycle() throws Exception {
         StorageChecker storageChecker = mock(StorageChecker.class);
-        StaticQuotaCallback target = new StaticQuotaCallback(storageChecker, Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig);
+        StaticQuotaCallback target = new StaticQuotaCallback(storageChecker, Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
         target.configure(Map.of());
         target.updateClusterMetadata(null);
         verify(storageChecker, times(1)).startIfNecessary();
@@ -115,7 +120,7 @@ class StaticQuotaCallbackTest {
         StorageChecker mock = mock(StorageChecker.class);
         ArgumentCaptor<Consumer<Long>> argument = ArgumentCaptor.forClass(Consumer.class);
         doNothing().when(mock).configure(anyLong(), anyList(), argument.capture());
-        StaticQuotaCallback quotaCallback = new StaticQuotaCallback(mock, Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig);
+        StaticQuotaCallback quotaCallback = new StaticQuotaCallback(mock, Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
         quotaCallback.configure(Map.of());
         Consumer<Long> storageUpdateConsumer = argument.getValue();
         quotaCallback.updateClusterMetadata(null);
@@ -138,7 +143,7 @@ class StaticQuotaCallbackTest {
         ArgumentCaptor<Consumer<Long>> argument = ArgumentCaptor.forClass(Consumer.class);
         doNothing().when(mock).configure(anyLong(), anyList(), argument.capture());
 
-        StaticQuotaCallback quotaCallback = new StaticQuotaCallback(mock, Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig);
+        StaticQuotaCallback quotaCallback = new StaticQuotaCallback(mock, Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
 
         quotaCallback.configure(Map.of(
                 StaticQuotaConfig.STORAGE_QUOTA_SOFT_PROP, 15L,
@@ -187,7 +192,7 @@ class StaticQuotaCallbackTest {
     void shouldNotScheduleDataSourceTask() {
         //Given
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig, kafkaClientManager);
 
         //When
         staticQuotaCallback.configure(Map.of());
@@ -200,7 +205,7 @@ class StaticQuotaCallbackTest {
     void shouldScheduleDataSourceTask() {
         //Given
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig, kafkaClientManager);
         final Long interval = 10L;
 
         //When
@@ -214,7 +219,7 @@ class StaticQuotaCallbackTest {
     void shouldCancelExistingScheduleDataSourceTask() {
         //Given
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig, kafkaClientManager);
         final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
         doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(DataSourceTask.class), anyLong(), anyLong(), any());
         final int interval = 10;
@@ -230,7 +235,7 @@ class StaticQuotaCallbackTest {
     void shouldNotScheduleQuotaPolicyTask() {
         //Given
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig, kafkaClientManager);
 
         //When
         staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, 0));
@@ -243,7 +248,7 @@ class StaticQuotaCallbackTest {
     void shouldScheduleQuotaPolicyTask() {
         //Given
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig, kafkaClientManager);
         final Long interval = 10L;
 
         //When
@@ -257,7 +262,7 @@ class StaticQuotaCallbackTest {
     void shouldCancelExistingScheduleQuotaPolicyTask() {
         //Given
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig, kafkaClientManager);
         final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
         doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(QuotaPolicyTask.class), anyLong(), anyLong(), any());
         final int interval = 10;
@@ -272,9 +277,10 @@ class StaticQuotaCallbackTest {
 
     @Test
     void shouldShutdownExecutorServiceOnClose() {
+
         //Given
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig, kafkaClientManager);
         when(executorService.shutdownNow()).thenReturn(List.of());
 
         //When
@@ -282,6 +288,33 @@ class StaticQuotaCallbackTest {
 
         //Then
         verify(executorService).shutdownNow();
+    }
+
+    @Test
+    void shouldPropagateCloseToKafkaClientManager() throws IOException {
+        //Given
+        final KafkaClientManager kafkaClientManager = mock(KafkaClientManager.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
+
+        //When
+        staticQuotaCallback.close();
+
+        //Then
+        verify(kafkaClientManager).close();
+    }
+
+    @Test
+    void shouldPropagateConfigurationToKafkaClientManager() {
+        //Given
+        final KafkaClientManager kafkaClientManager = mock(KafkaClientManager.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
+        final Map<String, Object> configMap = Map.of();
+
+        //When
+        staticQuotaCallback.configure(configMap);
+
+        //Then
+        verify(kafkaClientManager).configure(eq(configMap));
     }
 
     private SortedMap<MetricName, Metric> getMetricGroup(String p, String t) {
@@ -302,8 +335,10 @@ class StaticQuotaCallbackTest {
         return metrics.entrySet().stream().filter(e -> name.equals(e.getKey().getName())).map(e -> (Gauge<T>) e.getValue()).findFirst();
     }
 
+    //TODO this is still a code smell.
     private StaticQuotaConfig spyOnQuotaConfig(Map<String, ?> config, Boolean doLog) {
         StaticQuotaConfig staticQuotaConfig = spy(new StaticQuotaConfig(config, doLog));
+        staticQuotaConfig.withKafkaClientManager(kafkaClientManager);
         lenient().doReturn(UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER).when(staticQuotaConfig).quotaFactorSupplier();
         lenient().doReturn((Supplier<Iterable<VolumeUsageMetrics>>) List::of).when(staticQuotaConfig).volumeUsageMetricsSupplier();
         lenient().doReturn((Consumer<VolumeUsageMetrics>) volumeUsageMetrics -> {

@@ -4,6 +4,8 @@
  */
 package io.strimzi.kafka.quotas;
 
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -22,6 +24,7 @@ import java.util.stream.Collectors;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.MetricName;
+import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.QuotaPolicyTaskImpl;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
@@ -50,6 +53,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private final StorageChecker storageChecker;
     private final ScheduledExecutorService executorService;
     private final BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory;
+    private final KafkaClientManager kafkaClientManager;
     private final static long LOGGING_DELAY_MS = 1000;
     private AtomicLong lastLoggedMessageSoftTimeMs = new AtomicLong(0);
     private AtomicLong lastLoggedMessageHardTimeMs = new AtomicLong(0);
@@ -68,14 +72,16 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                     thread.setDaemon(true);
                     return thread;
                 }),
-                StaticQuotaConfig::new
+                StaticQuotaConfig::new,
+                new KafkaClientManager()
         );
     }
 
-    StaticQuotaCallback(StorageChecker storageChecker, ScheduledExecutorService executorService, BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory) {
+    StaticQuotaCallback(StorageChecker storageChecker, ScheduledExecutorService executorService, BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory, KafkaClientManager kafkaClientManager) {
         this.storageChecker = storageChecker;
         this.executorService = executorService;
         this.pluginConfigFactory = pluginConfigFactory;
+        this.kafkaClientManager = kafkaClientManager;
     }
 
     @Override
@@ -147,10 +153,13 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     public void close() {
         try {
             storageChecker.stop();
+            kafkaClientManager.close();
             executorService.shutdownNow();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
         } finally {
             Metrics.defaultRegistry().allMetrics().keySet().stream().filter(m -> scope.equals(m.getScope())).forEach(Metrics.defaultRegistry()::removeMetric);
         }
@@ -159,8 +168,9 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @SuppressWarnings("unchecked")
     @Override
     public void configure(Map<String, ?> configs) {
+        kafkaClientManager.configure(configs);
         //TODO config object is shot lived so it can't manage kafka sessions :(
-        StaticQuotaConfig config = pluginConfigFactory.apply(configs, true);
+        StaticQuotaConfig config = pluginConfigFactory.apply(configs, true).withKafkaClientManager(kafkaClientManager);
         staticQuotaSupplier = config.quotaSupplier();
         quotaFactorSupplier = config.quotaFactorSupplier();
         storageQuotaSoft = config.getSoftStorageQuota();
