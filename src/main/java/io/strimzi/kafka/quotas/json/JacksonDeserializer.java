@@ -41,7 +41,7 @@ public class JacksonDeserializer<T> implements Deserializer<T> {
         try {
             return objectMapper.readValue(data, objectType);
         } catch (IOException e) {
-            log.warn("Something very strange happened, we got an IOException ({}) reading from a byte array", e.getMessage(), e);
+            log.error("Something very strange happened, we got an IOException ({}) reading from a byte array", e.getMessage(), e);
             return null;
         }
     }
