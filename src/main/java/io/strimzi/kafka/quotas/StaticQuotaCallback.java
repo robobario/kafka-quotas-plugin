@@ -11,6 +11,7 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -152,9 +153,9 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @Override
     public void close() {
         try {
-            storageChecker.stop();
-            kafkaClientManager.close();
             executorService.shutdownNow();
+            kafkaClientManager.close();
+            storageChecker.stop();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
@@ -188,7 +189,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
         if (config.getStorageCheckInterval() > 0) {
             final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, config.getSoftLimit(), config.getHardLimit(), config.getStorageCheckInterval(), config.getBrokerId(), config.volumeUsageMetricsPublisher());
-            dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
+            dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 5, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
         }
 
         if (quotaPolicyFuture != null) {
@@ -200,7 +201,17 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
                 quotaPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }
-            quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 0, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
+            executorService.schedule(() -> {
+                try {
+                    config.ensureTopicExists(config.getVolumeUsageMetricsTopic()).get();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    log.error("problem ensuring topic {} is available on the cluster due to: {}", config.getVolumeUsageMetricsTopic(), e);
+                } catch (ExecutionException e) {
+                    log.error("problem ensuring topic {} is available on the cluster due to: {}", config.getVolumeUsageMetricsTopic(), e);
+                }
+            }, 5, TimeUnit.SECONDS);
+            quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 5, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
         }
         //TODO This doesn't really make sense to log here any more, but is useful to have
         log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", config.getQuotaMap(), storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);
