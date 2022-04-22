@@ -21,8 +21,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 @ExtendWith(MockitoExtension.class)
 class StaticQuotaConfigTest {
 
+    public static final String TEST_TOPIC = "testTopic";
     @Mock(lenient = true)
     private KafkaClientManager kafkaClientManager;
+
     public static final int LIMIT_BYTES = 10000;
 
     @Test
@@ -55,7 +57,7 @@ class StaticQuotaConfigTest {
     @SetSystemProperty(key = "broker.id", value = "2")
     void shouldUseConfiguredBrokerId() {
         //Given
-        final StaticQuotaConfig staticQuotaConfig = new StaticQuotaConfig(Map.of("broker.id", "1"), false);
+        final StaticQuotaConfig staticQuotaConfig = newStaticQuotaConfig(Map.of("broker.id", "1"));
 
         //When
         final String actualBrokerId = staticQuotaConfig.getBrokerId();
@@ -68,7 +70,7 @@ class StaticQuotaConfigTest {
     @SetSystemProperty(key = "broker.id", value = "2")
     void shouldFallbackToSystemPropertiesBrokerId() {
         //Given
-        final StaticQuotaConfig staticQuotaConfig = new StaticQuotaConfig(Map.of(), false);
+        final StaticQuotaConfig staticQuotaConfig = newStaticQuotaConfig(Map.of());
 
         //When
         final String actualBrokerId = staticQuotaConfig.getBrokerId();
@@ -81,7 +83,7 @@ class StaticQuotaConfigTest {
     @ClearSystemProperty(key = "broker.id")
     void shouldUseDefaultBrokerId() {
         //Given
-        final StaticQuotaConfig staticQuotaConfig = new StaticQuotaConfig(Map.of(), false);
+        final StaticQuotaConfig staticQuotaConfig = newStaticQuotaConfig(Map.of());
 
         //When
         final String actualBrokerId = staticQuotaConfig.getBrokerId();
@@ -89,4 +91,11 @@ class StaticQuotaConfigTest {
         //Then
         assertThat(actualBrokerId).isEqualTo("-1");
     }
+
+    private StaticQuotaConfig newStaticQuotaConfig(Map<String, String> config) {
+        final StaticQuotaConfig staticQuotaConfig = new StaticQuotaConfig(config, false);
+        staticQuotaConfig.withKafkaClientManager(kafkaClientManager);
+        return staticQuotaConfig;
+    }
+
 }

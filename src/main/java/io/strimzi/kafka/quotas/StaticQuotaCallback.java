@@ -11,6 +11,8 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -29,7 +31,10 @@ import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.QuotaPolicyTaskImpl;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
+import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.Cluster;
+import org.apache.kafka.common.errors.TopicExistsException;
+import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.quota.ClientQuotaCallback;
@@ -201,16 +206,17 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
                 quotaPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }
+            String topic = config.getVolumeUsageMetricsTopic();
             executorService.schedule(() -> {
                 try {
-                    config.ensureTopicExists(config.getVolumeUsageMetricsTopic()).get();
+                    ensureTopicIsAvailable(topic, config).get();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     log.error("problem ensuring topic {} is available on the cluster due to: {}", config.getVolumeUsageMetricsTopic(), e);
                 } catch (ExecutionException e) {
                     log.error("problem ensuring topic {} is available on the cluster due to: {}", config.getVolumeUsageMetricsTopic(), e);
                 }
-            }, 5, TimeUnit.SECONDS);
+            }, 1, TimeUnit.SECONDS);
             quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 5, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
         }
         //TODO This doesn't really make sense to log here any more, but is useful to have
@@ -234,6 +240,33 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                 return storageQuotaHard;
             }
         });
+    }
+
+    /*test*/ CompletableFuture<Void> ensureTopicIsAvailable(String topic, StaticQuotaConfig config) {
+        final CompletableFuture<Void> createTopicFuture = new CompletableFuture<>();
+        kafkaClientManager.adminClient()
+                .describeTopics(List.of(topic))
+                .all()
+                .whenComplete((topicConfig, err) -> {
+                    if (err != null && (err instanceof UnknownTopicOrPartitionException || err.getCause() instanceof UnknownTopicOrPartitionException)) {
+                        log.info("Topic {} does not existing. Creating now.", topic);
+                        final int topicPartitionCount = config.getParitionCount();
+                        final List<NewTopic> topics = List.of(new NewTopic(topic, Optional.of(topicPartitionCount), Optional.empty()));
+                        kafkaClientManager.adminClient()
+                                .createTopics(topics)
+                                .all()
+                                .whenComplete((unused, throwable) -> {
+                                    if (throwable != null && !(throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException)) {
+                                        createTopicFuture.completeExceptionally(throwable);
+                                    }
+                                    createTopicFuture.complete(null);
+                                });
+                    } else {
+                        createTopicFuture.complete(null);
+                    }
+                });
+        //TODO should we return this or just wait here?
+        return createTopicFuture;
     }
 
     private void updateUsedStorage(Long newValue) {

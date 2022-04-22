@@ -58,6 +58,7 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String QUOTA_POLICY_INTERVAL_PROP = "client.quota.callback.quotaPolicy.check-interval";
     static final String QUOTA_FACTOR_UPDATE_TOPIC_PATTERN_PROP = "client.quota.callback.quotaFactor.topicPattern";
     static final String VOLUME_USAGE_METRICS_TOPIC_PROP = "client.quota.callback.usageMetrics.topic";
+    static final String TOPIC_PARTITION_COUNT_PROP = "client.quota.callback.partitionCount";
 
     static final String LOG_DIRS_PROP = "log.dirs";
 
@@ -67,8 +68,8 @@ public class StaticQuotaConfig extends AbstractConfig {
     /**
      * Construct a configuration for the static quota plugin.
      *
-     * @param props              the configuration properties
-     * @param doLog              whether the configurations should be logged
+     * @param props the configuration properties
+     * @param doLog whether the configurations should be logged
      */
     public StaticQuotaConfig(Map<String, ?> props, boolean doLog) {
         super(new ConfigDef()
@@ -82,6 +83,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(QUOTA_POLICY_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between quota policy runs (in seconds, default of 0 means disabled")
                         .define(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN_PROP, STRING, "__strimzi_quotaFactorUpdate", LOW, "topic used to update new quota factors to apply to requests")
                         .define(VOLUME_USAGE_METRICS_TOPIC_PROP, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
+                        .define(TOPIC_PARTITION_COUNT_PROP, INT, "3", LOW, "The number of partitions to use for the topics used by the plugin")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
                 props,
                 doLog);
@@ -154,7 +156,7 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     private Supplier<Iterable<VolumeUsageMetrics>> rawKafkaConsumer() {
         final String volumeUsageMetricsTopic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
-        final  org.apache.kafka.clients.consumer.Consumer<String, VolumeUsageMetrics> kafkaConsumer = kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class);
+        final org.apache.kafka.clients.consumer.Consumer<String, VolumeUsageMetrics> kafkaConsumer = kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class);
         return () -> {
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
             //TODO nasty doing this in the supplier should really be done async
@@ -176,11 +178,11 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     public Consumer<VolumeUsageMetrics> volumeUsageMetricsPublisher() {
-        //TODO lifecycle management
         //TODO connection status metrics
         Producer<String, VolumeUsageMetrics> kafkaProducer = kafkaClientManager.producer(VolumeUsageMetrics.class);
         final String brokerId = getBrokerId();
         final String topic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
+
         return snapshot -> kafkaProducer.send(new ProducerRecord<>(topic, brokerId, snapshot));
     }
 
@@ -198,6 +200,14 @@ public class StaticQuotaConfig extends AbstractConfig {
                 return Set.of();
             }
         };
+    }
+
+    public String getVolumeUsageMetricsTopic() {
+        return getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
+    }
+
+    public int getParitionCount() {
+        return getInt(TOPIC_PARTITION_COUNT_PROP);
     }
 }
 

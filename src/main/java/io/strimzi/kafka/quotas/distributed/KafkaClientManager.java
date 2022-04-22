@@ -91,7 +91,7 @@ public class KafkaClientManager implements Closeable, Configurable {
         //TODO connection status metrics
         final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> {
             final Map<String, Object> consumerConfig = kafkaClientFactory.getBaseKafkaConfig();
-            consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG, "TODO");
+            consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG, messageType.getSimpleName());
             return kafkaClientFactory.newConsumer(consumerConfig, key);
         });
 
