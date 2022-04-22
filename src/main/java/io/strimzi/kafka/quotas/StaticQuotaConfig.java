@@ -24,8 +24,6 @@ import io.strimzi.kafka.quotas.local.InMemoryQuotaFactorSupplier;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
-import org.apache.kafka.clients.admin.Admin;
-import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.config.AbstractConfig;
@@ -156,11 +154,11 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     private Supplier<Iterable<VolumeUsageMetrics>> rawKafkaConsumer() {
         final String volumeUsageMetricsTopic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
-        final org.apache.kafka.clients.consumer.Consumer<String, VolumeUsageMetrics> kafkaConsumer = kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class);
         return () -> {
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
             //TODO nasty doing this in the supplier should really be done async
-            kafkaConsumer.poll(Duration.of(10, ChronoUnit.SECONDS))
+            kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class)
+                    .poll(Duration.of(10, ChronoUnit.SECONDS))
                     .records(volumeUsageMetricsTopic)
                     .forEach(cr -> usageMetrics.add(cr.value()));
             return usageMetrics;
@@ -179,18 +177,16 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     public Consumer<VolumeUsageMetrics> volumeUsageMetricsPublisher() {
         //TODO connection status metrics
-        Producer<String, VolumeUsageMetrics> kafkaProducer = kafkaClientManager.producer(VolumeUsageMetrics.class);
         final String brokerId = getBrokerId();
         final String topic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
 
-        return snapshot -> kafkaProducer.send(new ProducerRecord<>(topic, brokerId, snapshot));
+        return snapshot -> kafkaClientManager.producer(VolumeUsageMetrics.class).send(new ProducerRecord<>(topic, brokerId, snapshot));
     }
 
     public Supplier<Collection<String>> activeBrokerSupplier() {
-        final Admin admin = kafkaClientManager.adminClient();
         return () -> {
             try {
-                return admin.describeCluster().nodes().thenApply(nodes -> nodes.stream().map(Node::idString).collect(Collectors.toSet())).get(1, TimeUnit.SECONDS);
+                return kafkaClientManager.adminClient().describeCluster().nodes().thenApply(nodes -> nodes.stream().map(Node::idString).collect(Collectors.toSet())).get(1, TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 log.warn("unable to get current set of active brokers: {}", e.getMessage(), e);

@@ -198,7 +198,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
         if (config.getStorageCheckInterval() > 0) {
             final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, config.getSoftLimit(), config.getHardLimit(), config.getStorageCheckInterval(), config.getBrokerId(), config.volumeUsageMetricsPublisher());
-            dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 5, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
+            dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
         }
 
         if (quotaPolicyFuture != null) {
@@ -220,8 +220,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                 } catch (ExecutionException e) {
                     log.error("problem ensuring topic {} is available on the cluster due to: {}", config.getVolumeUsageMetricsTopic(), e);
                 }
-            }, 1, TimeUnit.SECONDS);
-            quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 5, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
+            }, 0, TimeUnit.SECONDS);
+            quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 0, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
         }
         //TODO This doesn't really make sense to log here any more, but is useful to have
         log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", config.getQuotaMap(), storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);
