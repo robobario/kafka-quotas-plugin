@@ -25,7 +25,6 @@ import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import com.yammer.metrics.Metrics;
-import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.MetricName;
 import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.QuotaPolicyTaskImpl;
@@ -35,7 +34,6 @@ import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
-import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.quota.ClientQuotaCallback;
 import org.apache.kafka.server.quota.ClientQuotaEntity;
@@ -63,7 +61,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private final static long LOGGING_DELAY_MS = 1000;
     private AtomicLong lastLoggedMessageSoftTimeMs = new AtomicLong(0);
     private AtomicLong lastLoggedMessageHardTimeMs = new AtomicLong(0);
-    private final String scope = "io.strimzi.kafka.quotas.StaticQuotaCallback";
 
     //Default to no restrictions until things have been configured.
     private volatile QuotaSupplier staticQuotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
@@ -88,6 +85,13 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         this.executorService = executorService;
         this.pluginConfigFactory = pluginConfigFactory;
         this.kafkaClientManager = kafkaClientManager;
+    }
+
+    public static MetricName metricName(Class<?> clazz, String name) {
+        String group = clazz.getPackageName();
+        String type = clazz.getSimpleName();
+        String mBeanName = String.format("%s:type=%s,name=%s", group, type, name);
+        return new MetricName(group, type, name, "io.strimzi.kafka.quotas.StaticQuotaCallback", mBeanName);
     }
 
     @Override
@@ -167,7 +171,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         } catch (IOException e) {
             throw new UncheckedIOException(e);
         } finally {
-            Metrics.defaultRegistry().allMetrics().keySet().stream().filter(m -> scope.equals(m.getScope())).forEach(Metrics.defaultRegistry()::removeMetric);
+            Metrics.defaultRegistry().allMetrics().keySet().stream().filter(m -> "io.strimzi.kafka.quotas.StaticQuotaCallback".equals(m.getScope())).forEach(Metrics.defaultRegistry()::removeMetric);
         }
     }
 
@@ -224,22 +228,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         if (!excludedPrincipalNameList.isEmpty()) {
             log.info("Excluded principals {}", excludedPrincipalNameList);
         }
-
-        Metrics.newGauge(metricName(StorageChecker.class, "TotalStorageUsedBytes"), new Gauge<Long>() {
-            public Long value() {
-                return storageUsed.get();
-            }
-        });
-        Metrics.newGauge(metricName(StorageChecker.class, "SoftLimitBytes"), new Gauge<Long>() {
-            public Long value() {
-                return storageQuotaSoft;
-            }
-        });
-        Metrics.newGauge(metricName(StorageChecker.class, "HardLimitBytes"), new Gauge<Long>() {
-            public Long value() {
-                return storageQuotaHard;
-            }
-        });
     }
 
     /*test*/ CompletableFuture<Void> ensureTopicIsAvailable(String topic, StaticQuotaConfig config) {
@@ -273,25 +261,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         var oldValue = storageUsed.getAndSet(newValue);
         if (oldValue != newValue) {
             resetQuota.set(true);
-        }
-    }
-
-    private MetricName metricName(Class<?> clazz, String name) {
-        String group = clazz.getPackageName();
-        String type = clazz.getSimpleName();
-        String mBeanName = String.format("%s:type=%s,name=%s", group, type, name);
-        return new MetricName(group, type, name, this.scope, mBeanName);
-    }
-
-    private static class ClientQuotaGauge extends Gauge<Double> {
-        private final Quota quota;
-
-        public ClientQuotaGauge(Quota quota) {
-            this.quota = quota;
-        }
-
-        public Double value() {
-            return quota.bound();
         }
     }
 }

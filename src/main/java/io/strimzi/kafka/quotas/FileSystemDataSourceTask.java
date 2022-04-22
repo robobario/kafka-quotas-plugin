@@ -14,9 +14,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
+import com.yammer.metrics.Metrics;
+import com.yammer.metrics.core.Gauge;
 import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.Volume;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
@@ -36,6 +39,8 @@ public class FileSystemDataSourceTask implements DataSourceTask {
 
     private final Logger log = LoggerFactory.getLogger(FileSystemDataSourceTask.class);
 
+    private final AtomicLong totalConsumedSpace = new AtomicLong(-1);
+
     public FileSystemDataSourceTask(List<Path> logDirs, Limit softLimit, Limit hardLimit, long period, String brokerId, Consumer<VolumeUsageMetrics> volumeUsageMetricsConsumer) {
         this.softLimit = softLimit;
         this.hardLimit = hardLimit;
@@ -54,6 +59,22 @@ public class FileSystemDataSourceTask implements DataSourceTask {
                 .collect(Collectors.toUnmodifiableSet());
         this.brokerId = brokerId;
         this.volumeUsageMetricsConsumer = volumeUsageMetricsConsumer;
+
+        Metrics.newGauge(StaticQuotaCallback.metricName(StorageChecker.class, "TotalStorageUsedBytes"), new Gauge<Long>() {
+            public Long value() {
+                return totalConsumedSpace.get();
+            }
+        });
+        Metrics.newGauge(StaticQuotaCallback.metricName(StorageChecker.class, "SoftLimitBytes"), new Gauge<Long>() {
+            public Long value() {
+                return softLimit.getLevel();
+            }
+        });
+        Metrics.newGauge(StaticQuotaCallback.metricName(StorageChecker.class, "HardLimitBytes"), new Gauge<Long>() {
+            public Long value() {
+                return hardLimit.getLevel();
+            }
+        });
     }
 
     @Override
@@ -82,4 +103,5 @@ public class FileSystemDataSourceTask implements DataSourceTask {
                 .collect(Collectors.toUnmodifiableList());
         volumeUsageMetricsConsumer.accept(new VolumeUsageMetrics(brokerId, snapshotAt, hardLimit, softLimit, volumes));
     }
+
 }

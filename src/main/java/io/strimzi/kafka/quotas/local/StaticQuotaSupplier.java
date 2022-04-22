@@ -9,12 +9,12 @@ import java.util.Map;
 
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.Gauge;
-import com.yammer.metrics.core.MetricName;
 import io.strimzi.kafka.quotas.QuotaSupplier;
 import io.strimzi.kafka.quotas.StaticQuotaCallback;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.server.quota.ClientQuotaType;
 
+import static io.strimzi.kafka.quotas.StaticQuotaCallback.metricName;
 import static java.util.Locale.ENGLISH;
 
 public class StaticQuotaSupplier implements QuotaSupplier {
@@ -32,13 +32,6 @@ public class StaticQuotaSupplier implements QuotaSupplier {
     @Override
     public double quotaFor(ClientQuotaType quotaType, Map<String, String> metricTags) {
         return quotaMap.getOrDefault(quotaType, Quota.upperBound(QuotaSupplier.UNLIMITED)).bound();
-    }
-
-    private MetricName metricName(Class<?> clazz, String name) {
-        String group = clazz.getPackageName();
-        String type = clazz.getSimpleName();
-        String mBeanName = String.format("%s:type=%s,name=%s", group, type, name);
-        return new MetricName(group, type, name, SCOPE, mBeanName);
     }
 
     private static class ClientQuotaGauge extends Gauge<Double> {
