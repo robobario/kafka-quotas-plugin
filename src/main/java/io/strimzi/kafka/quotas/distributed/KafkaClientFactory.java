@@ -13,6 +13,8 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import io.strimzi.kafka.quotas.json.JacksonDeserializer;
 import io.strimzi.kafka.quotas.json.JacksonSerializer;
 import org.apache.kafka.clients.CommonClientConfigs;
@@ -45,13 +47,15 @@ public class KafkaClientFactory {
         keySerializer = new StringSerializer();
         keyDeserializer = new StringDeserializer();
         objectMapper = new ObjectMapper();
+        objectMapper.registerModule(new JavaTimeModule())
+                .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
     }
 
     public <V> Producer<String, V> newProducer(Map<String, Object> kafkaConfig, Class<V> ignored) {
         //Include the value class in the method signature to make mocking easier...
         return new KafkaProducer<>(kafkaConfig, keySerializer, new JacksonSerializer<>(objectMapper));
     }
-    
+
     public <V> Consumer<String, V> newConsumer(Map<String, Object> kafkaConfig, Class<V> messageType) {
         return new KafkaConsumer<>(kafkaConfig, keyDeserializer, new JacksonDeserializer<>(objectMapper, messageType));
     }
@@ -69,7 +73,7 @@ public class KafkaClientFactory {
                                         SslConfigs.SSL_TRUSTSTORE_LOCATION_CONFIG,
                                         SslConfigs.SSL_TRUSTSTORE_PASSWORD_CONFIG)
                                 .map(p -> {
-                                    String configKey = String.format("listener.name.%s.%s", kafkaClientConfig.getInt(LISTENER_NAME_PROP), p);
+                                    String configKey = String.format("listener.name.%s.%s", kafkaClientConfig.getString(LISTENER_NAME_PROP), p);
                                     String v = getOriginalConfigString(configKey);
                                     return Map.entry(p, Objects.requireNonNullElse(v, ""));
                                 }).filter(e -> !"".equals(e.getValue())),
