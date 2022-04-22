@@ -187,6 +187,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         storageQuotaHard = config.getHardStorageQuota();
         excludedPrincipalNameList = config.getExcludedPrincipalNameList();
 
+        quotaFactorSupplier.addUpdateListener(() -> resetQuota.set(true));
+
         long storageCheckIntervalMillis = TimeUnit.SECONDS.toMillis(config.getStorageCheckInterval());
         List<Path> logDirs = config.getLogDirs().stream().map(Paths::get).collect(Collectors.toList());
         storageChecker.configure(storageCheckIntervalMillis,
@@ -267,7 +269,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private void updateUsedStorage(Long newValue) {
         var oldValue = storageUsed.getAndSet(newValue);
         if (oldValue != newValue) {
-            //TODO migrate to qutoaPolicy
             resetQuota.set(true);
         }
     }

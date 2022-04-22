@@ -6,6 +6,8 @@
 package io.strimzi.kafka.quotas.distributed;
 
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
@@ -20,6 +22,10 @@ public class KafkaQuotaFactorSupplier implements QuotaFactorSupplier, AutoClosea
     private final Consumer<String, UpdateQuotaFactor> kafkaConsumer;
 
     private final AtomicLong currentFactor;
+
+    private final List<Runnable> listeners = new ArrayList<>();
+
+    private static final double EPSILON = 0.00001;
 
     public KafkaQuotaFactorSupplier(String subscriptionPattern, Consumer<String, UpdateQuotaFactor> kafkaConsumer) {
         this.subscriptionPattern = Pattern.compile(subscriptionPattern);
@@ -46,10 +52,23 @@ public class KafkaQuotaFactorSupplier implements QuotaFactorSupplier, AutoClosea
     public void run() {
         //TODO inject duration
         final ConsumerRecords<String, UpdateQuotaFactor> consumerRecords = kafkaConsumer.poll(Duration.ofSeconds(10));
+        final double originalFactor = get();
         consumerRecords.forEach(cr -> {
             final UpdateQuotaFactor updateMessage = cr.value();
             currentFactor.getAndSet(Double.doubleToLongBits(updateMessage.getFactor()));
         });
+        if (hasChanged(currentFactor.get(), originalFactor)) {
+            listeners.forEach(Runnable::run);
+        }
 
+    }
+
+    @Override
+    public void addUpdateListener(Runnable listener) {
+        listeners.add(listener);
+    }
+
+    private boolean hasChanged(double newFactor, double oldFactor) {
+        return Math.abs(newFactor - oldFactor) > EPSILON;
     }
 }

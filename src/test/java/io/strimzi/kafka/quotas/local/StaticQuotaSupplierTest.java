@@ -19,6 +19,7 @@ import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static io.strimzi.kafka.quotas.TestUtils.EPSILON;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,7 +29,8 @@ class StaticQuotaSupplierTest {
     public static final double PRODUCE_QUOTA = 1024.0;
     public static final double FETCH_QUOTA = 456.0;
     public static final double REQUEST_QUOTA = 123456.0;
-    public static final double EPSILON = 0.00001;
+    public static final Offset<Double> OFFSET = Offset.offset(EPSILON);
+
     private StaticQuotaSupplier staticQuotaSupplier;
 
     @BeforeEach
@@ -47,7 +49,7 @@ class StaticQuotaSupplierTest {
         final double actualQuota = staticQuotaSupplier.quotaFor(ClientQuotaType.PRODUCE, Map.of());
 
         //Then
-        assertThat(actualQuota).isEqualTo(PRODUCE_QUOTA, Offset.offset(EPSILON));
+        assertThat(actualQuota).isEqualTo(PRODUCE_QUOTA, OFFSET);
     }
 
     @Test
@@ -58,7 +60,7 @@ class StaticQuotaSupplierTest {
         final double actualQuota = staticQuotaSupplier.quotaFor(ClientQuotaType.FETCH, Map.of());
 
         //Then
-        assertThat(actualQuota).isEqualTo(FETCH_QUOTA, Offset.offset(EPSILON));
+        assertThat(actualQuota).isEqualTo(FETCH_QUOTA, OFFSET);
     }
     @Test
     void shouldReturnConfiguredRequestQuota() {
@@ -68,7 +70,7 @@ class StaticQuotaSupplierTest {
         final double actualQuota = staticQuotaSupplier.quotaFor(ClientQuotaType.REQUEST, Map.of());
 
         //Then
-        assertThat(actualQuota).isEqualTo(REQUEST_QUOTA, Offset.offset(EPSILON));
+        assertThat(actualQuota).isEqualTo(REQUEST_QUOTA, OFFSET);
     }
 
     @Test

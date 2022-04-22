@@ -27,4 +27,9 @@ public class UnlimitedQuotaSupplier implements QuotaSupplier, QuotaFactorSupplie
     public Double get() {
         return 1.0;
     }
+
+    @Override
+    public void addUpdateListener(Runnable listener) {
+        listener.run(); //Run it once to trigger it, but otherwise it will never change.
+    }
 }

@@ -14,5 +14,6 @@ import java.util.function.Supplier;
  * A value of `0.0` implies that there is no quota available regardless of the defined quota.
  */
 public interface QuotaFactorSupplier extends Supplier<Double> {
+    void addUpdateListener(Runnable listener);
 
 }
