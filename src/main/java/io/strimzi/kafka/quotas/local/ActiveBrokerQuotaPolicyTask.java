@@ -26,8 +26,14 @@ import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import io.strimzi.kafka.quotas.types.Volume;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
+import org.slf4j.Logger;
 
-public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
+import static org.slf4j.LoggerFactory.getLogger;
+
+/**
+ * Determines the active set of brokers on every invocation and calculates the most restrictive quota factor based on the volume usage of those brokers.
+ */
+public class ActiveBrokerQuotaPolicyTask implements QuotaPolicyTask {
     private final int periodInSeconds;
     private final Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier;
     private final Supplier<Collection<String>> activeBrokerIdsSupplier;
@@ -35,11 +41,14 @@ public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
 
     private final ConcurrentMap<String, VolumeUsageMetrics> mostRecentMetricsPerBroker;
 
-    public QuotaPolicyTaskImpl(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier, Supplier<Collection<String>> activeBrokerIdsSupplier) {
+    private final Logger log = getLogger(ActiveBrokerQuotaPolicyTask.class);
+
+    public ActiveBrokerQuotaPolicyTask(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier, Supplier<Collection<String>> activeBrokerIdsSupplier) {
         this.periodInSeconds = periodInSeconds;
         this.volumeUsageMetricsSupplier = volumeUsageMetricsSupplier;
         this.activeBrokerIdsSupplier = activeBrokerIdsSupplier;
         mostRecentMetricsPerBroker = new ConcurrentHashMap<>();
+        log.info("Checking active broker usage: every {} {}", periodInSeconds, getPeriodUnit());
     }
 
     @Override
@@ -61,13 +70,16 @@ public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
     public void run() {
         double quotaFactor = 0.0D;
         for (VolumeUsageMetrics metricsUpdate : volumeUsageMetricsSupplier.get()) {
+            //Use putIfAbsent & replace to ensure we don't consider stale data
             final VolumeUsageMetrics lastKnown = mostRecentMetricsPerBroker.putIfAbsent(metricsUpdate.getBrokerId(), metricsUpdate);
             if (lastKnown != null && metricsUpdate.getSnapshotAt().isAfter(lastKnown.getSnapshotAt())) {
                 //TODO handle replace == false
                 mostRecentMetricsPerBroker.replace(metricsUpdate.getBrokerId(), lastKnown, metricsUpdate);
             }
         }
-        for (String brokerId : activeBrokerIdsSupplier.get()) {
+        final Collection<String> activeBrokers = activeBrokerIdsSupplier.get();
+        log.info("checking volume usage for {}", activeBrokers);
+        for (String brokerId : activeBrokers) {
             final VolumeUsageMetrics brokerSnapshot = mostRecentMetricsPerBroker.get(brokerId);
             if (brokerSnapshot == null) {
                 quotaFactor = 1.0D;
@@ -83,6 +95,7 @@ public class QuotaPolicyTaskImpl implements QuotaPolicyTask {
             }
         }
         quotaFactor = 1.0 - quotaFactor;
+        log.info("Broker volume usage check complete applying quota factor: {}", quotaFactor);
         for (Consumer<UpdateQuotaFactor> updateListener : updateListeners) {
             updateListener.accept(new UpdateQuotaFactor(Instant.now(), quotaFactor));
         }

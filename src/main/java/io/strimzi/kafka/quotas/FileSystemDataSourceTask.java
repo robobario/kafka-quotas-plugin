@@ -15,6 +15,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.concurrent.atomic.LongAdder;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
@@ -26,6 +27,9 @@ import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Determine the set of unique filesystems backing the configured log directories and periodically generate a usage snapshot covering each filesystem.
+ */
 public class FileSystemDataSourceTask implements DataSourceTask {
 
     private final Limit softLimit;
@@ -39,7 +43,7 @@ public class FileSystemDataSourceTask implements DataSourceTask {
 
     private final Logger log = LoggerFactory.getLogger(FileSystemDataSourceTask.class);
 
-    private final AtomicLong totalConsumedSpace = new AtomicLong(-1);
+    private final AtomicLong totalConsumedSpace;
 
     public FileSystemDataSourceTask(List<Path> logDirs, Limit softLimit, Limit hardLimit, long period, String brokerId, Consumer<VolumeUsageMetrics> volumeUsageMetricsConsumer) {
         this.softLimit = softLimit;
@@ -60,6 +64,7 @@ public class FileSystemDataSourceTask implements DataSourceTask {
         this.brokerId = brokerId;
         this.volumeUsageMetricsConsumer = volumeUsageMetricsConsumer;
 
+        totalConsumedSpace = new AtomicLong(-1);
         Metrics.newGauge(StaticQuotaCallback.metricName(StorageChecker.class, "TotalStorageUsedBytes"), new Gauge<Long>() {
             public Long value() {
                 return totalConsumedSpace.get();
@@ -75,6 +80,7 @@ public class FileSystemDataSourceTask implements DataSourceTask {
                 return hardLimit.getLevel();
             }
         });
+        log.info("Checking volume usage every {} {} with limits: soft: {} hard: {}", period, periodUnit, softLimit, hardLimit);
     }
 
     @Override
@@ -90,10 +96,13 @@ public class FileSystemDataSourceTask implements DataSourceTask {
     @Override
     public void run() {
         final Instant snapshotAt = Instant.now();
+        final LongAdder currentConsumedSpace = new LongAdder();
         final List<Volume> volumes = fileStores.stream()
                 .map(fs -> {
                     try {
-                        return new Volume(fs.name(), fs.getTotalSpace(), fs.getTotalSpace() - fs.getUsableSpace());
+                        final long consumedSpace = fs.getTotalSpace() - fs.getUsableSpace();
+                        currentConsumedSpace.add(consumedSpace);
+                        return new Volume(fs.name(), fs.getTotalSpace(), consumedSpace);
                     } catch (IOException e) {
                         log.warn("Unable to read disk usage for {} due to {}", fs.name(), e.getMessage(), e);
                         return null;
@@ -101,6 +110,7 @@ public class FileSystemDataSourceTask implements DataSourceTask {
                 })
                 .filter(Objects::nonNull)
                 .collect(Collectors.toUnmodifiableList());
+        totalConsumedSpace.set(currentConsumedSpace.longValue());
         volumeUsageMetricsConsumer.accept(new VolumeUsageMetrics(brokerId, snapshotAt, hardLimit, softLimit, volumes));
     }
 

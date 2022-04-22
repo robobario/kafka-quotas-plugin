@@ -27,7 +27,7 @@ import java.util.stream.Collectors;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.MetricName;
 import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
-import io.strimzi.kafka.quotas.local.QuotaPolicyTaskImpl;
+import io.strimzi.kafka.quotas.local.ActiveBrokerQuotaPolicyTask;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -206,7 +206,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
         //TODO add separate poll interval for quota policy
         if (config.getQuotaPolicyInterval() > 0) {
-            final QuotaPolicyTask quotaPolicyTask = new QuotaPolicyTaskImpl(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier());
+            final QuotaPolicyTask quotaPolicyTask = new ActiveBrokerQuotaPolicyTask(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier());
             if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
                 quotaPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }
@@ -216,15 +216,14 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                     ensureTopicIsAvailable(topic, config).get();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    log.error("problem ensuring topic {} is available on the cluster due to: {}", config.getVolumeUsageMetricsTopic(), e);
+                    log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e);
                 } catch (ExecutionException e) {
-                    log.error("problem ensuring topic {} is available on the cluster due to: {}", config.getVolumeUsageMetricsTopic(), e);
+                    log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e);
                 }
             }, 0, TimeUnit.SECONDS);
             quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 0, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
         }
         //TODO This doesn't really make sense to log here any more, but is useful to have
-        log.info("Configured quota callback with {}. Storage quota (soft, hard): ({}, {}). Storage check interval: {}ms", config.getQuotaMap(), storageQuotaSoft, storageQuotaHard, storageCheckIntervalMillis);
         if (!excludedPrincipalNameList.isEmpty()) {
             log.info("Excluded principals {}", excludedPrincipalNameList);
         }
@@ -232,23 +231,13 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
 
     /*test*/ CompletableFuture<Void> ensureTopicIsAvailable(String topic, StaticQuotaConfig config) {
         final CompletableFuture<Void> createTopicFuture = new CompletableFuture<>();
+        log.info("ensuring {} exists", topic);
         kafkaClientManager.adminClient()
                 .describeTopics(List.of(topic))
                 .all()
                 .whenComplete((topicConfig, err) -> {
                     if (err != null && (err instanceof UnknownTopicOrPartitionException || err.getCause() instanceof UnknownTopicOrPartitionException)) {
-                        log.info("Topic {} does not existing. Creating now.", topic);
-                        final int topicPartitionCount = config.getParitionCount();
-                        final List<NewTopic> topics = List.of(new NewTopic(topic, Optional.of(topicPartitionCount), Optional.empty()));
-                        kafkaClientManager.adminClient()
-                                .createTopics(topics)
-                                .all()
-                                .whenComplete((unused, throwable) -> {
-                                    if (throwable != null && !(throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException)) {
-                                        createTopicFuture.completeExceptionally(throwable);
-                                    }
-                                    createTopicFuture.complete(null);
-                                });
+                        handleUnknownTopicException(topic, config, createTopicFuture);
                     } else {
                         createTopicFuture.complete(null);
                     }
@@ -257,9 +246,28 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         return createTopicFuture;
     }
 
+    private void handleUnknownTopicException(String topic, StaticQuotaConfig config, CompletableFuture<Void> createTopicFuture) {
+        log.info("Topic {} does not existing. Creating now.", topic);
+        final int topicPartitionCount = config.getParitionCount();
+        final List<NewTopic> topics = List.of(new NewTopic(topic, Optional.of(topicPartitionCount), Optional.empty()));
+        kafkaClientManager.adminClient()
+                .createTopics(topics)
+                .all()
+                .whenComplete((unused, throwable) -> {
+                    if (throwable != null && !(throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException)) {
+                        log.warn("Error creating topic: {}: {}", topic, throwable.getMessage(), throwable);
+                        createTopicFuture.completeExceptionally(throwable);
+                        return;
+                    }
+                    log.info("Created topic: {}", topic);
+                    createTopicFuture.complete(null);
+                });
+    }
+
     private void updateUsedStorage(Long newValue) {
         var oldValue = storageUsed.getAndSet(newValue);
         if (oldValue != newValue) {
+            //TODO migrate to qutoaPolicy
             resetQuota.set(true);
         }
     }

@@ -13,13 +13,15 @@ import io.strimzi.kafka.quotas.QuotaSupplier;
 import io.strimzi.kafka.quotas.StaticQuotaCallback;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.server.quota.ClientQuotaType;
+import org.slf4j.Logger;
 
 import static io.strimzi.kafka.quotas.StaticQuotaCallback.metricName;
 import static java.util.Locale.ENGLISH;
+import static org.slf4j.LoggerFactory.getLogger;
 
 public class StaticQuotaSupplier implements QuotaSupplier {
     private final Map<ClientQuotaType, Quota> quotaMap;
-    private static final String SCOPE = "io.strimzi.kafka.quotas.StaticQuotaCallback"; //TODO this doesn't make a lot of sense
+    private final Logger log = getLogger(StaticQuotaSupplier.class);
 
     public StaticQuotaSupplier(Map<ClientQuotaType, Quota> quotaMap) {
         this.quotaMap = quotaMap;
@@ -27,6 +29,7 @@ public class StaticQuotaSupplier implements QuotaSupplier {
             String name = clientQuotaType.name().toUpperCase(ENGLISH).charAt(0) + clientQuotaType.name().toLowerCase(ENGLISH).substring(1);
             Metrics.newGauge(metricName(StaticQuotaCallback.class, name), new ClientQuotaGauge(quota));
         });
+        log.info("loaded the following quota limits: {}", quotaMap);
     }
 
     @Override
