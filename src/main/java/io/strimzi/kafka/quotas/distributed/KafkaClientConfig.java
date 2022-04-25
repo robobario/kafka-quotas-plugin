@@ -20,7 +20,7 @@ class KafkaClientConfig extends AbstractConfig {
         super(new ConfigDef()
                         .define(KafkaClientFactory.LISTENER_NAME_PROP, STRING, "replication-9091", LOW, "which listener to connect to")
                         .define(KafkaClientFactory.LISTENER_PORT_PROP, INT, 9091, LOW, "which port to connect to the listener on")
-                        .define(KafkaClientFactory.LISTENER_PROTOCOL_PROP, STRING, "SSL", LOW, "what protocol to use when connecting to the listener listener"),
+                        .define(KafkaClientFactory.LISTENER_PROTOCOL_PROP, STRING, "SSL", LOW, "what protocol to use when connecting to the listener"),
                 props,
                 doLog);
     }

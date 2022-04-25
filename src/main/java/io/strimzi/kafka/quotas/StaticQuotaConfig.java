@@ -202,7 +202,7 @@ public class StaticQuotaConfig extends AbstractConfig {
         return getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
     }
 
-    public int getParitionCount() {
+    public int getPartitionCount() {
         return getInt(TOPIC_PARTITION_COUNT_PROP);
     }
 }

@@ -249,8 +249,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     }
 
     private void handleUnknownTopicException(String topic, StaticQuotaConfig config, CompletableFuture<Void> createTopicFuture) {
-        log.info("Topic {} does not existing. Creating now.", topic);
-        final int topicPartitionCount = config.getParitionCount();
+        log.info("Topic {} does not exist. Creating now.", topic);
+        final int topicPartitionCount = config.getPartitionCount();
         final List<NewTopic> topics = List.of(new NewTopic(topic, Optional.of(topicPartitionCount), Optional.empty()));
         kafkaClientManager.adminClient()
                 .createTopics(topics)

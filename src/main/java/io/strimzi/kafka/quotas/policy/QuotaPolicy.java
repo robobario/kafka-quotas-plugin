@@ -7,7 +7,7 @@ package io.strimzi.kafka.quotas.policy;
 import io.strimzi.kafka.quotas.types.Volume;
 
 /**
- * Abstracts the decision-making around hard and soft limits and how to calculate the affect the impact breaching the limits has on the client request.
+ * Abstracts the decision-making around hard and soft limits and how to calculate the effect the impact breaching the limits has on the client request.
  */
 public interface QuotaPolicy {
 
@@ -30,7 +30,7 @@ public interface QuotaPolicy {
     /**
      * Returns the fraction of the original quota this policy thinks is appropriate. Represented as percentage value between <code>0</code> and <code>1</code>
      * <p>
-     * Where a fraction of <code>1.0</code> is un affected <br>
+     * Where a fraction of <code>1.0</code> is unaffected <br>
      * Breaching the hard limit implies a quota factor of <code>0.0</code>
      * @param volumeDetails details of the volumes in question.
      * @return A value between <code>0</code> and <code>1</code>.

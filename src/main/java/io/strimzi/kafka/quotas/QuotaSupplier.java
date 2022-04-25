@@ -18,7 +18,7 @@ public interface QuotaSupplier {
      * For the given quotaType and tags determine what the configured quota is.
      *
      * The quota returned by this call is expected to be stable and represent the best case limit for a given request.
-     * If there is no limit to for quota implementations are expected to return {@code io.strimzi.kafka.quotas.QuotaSupplier#UNLIMITED}
+     * If there is no limit for the request implementations are expected to return {@code io.strimzi.kafka.quotas.QuotaSupplier#UNLIMITED}
      *
      * @param quotaType -  Type of quota requested
      * @param metricTags - Metric tags for a quota metric of type `quotaType`

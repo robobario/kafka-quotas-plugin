@@ -27,7 +27,7 @@
     "validFrom": {
       "$id": "#/properties/validFrom",
       "default": "",
-      "description": "The time at which the new factor takes affect.",
+      "description": "The time at which the new factor takes effect.",
       "examples": [
         "2022-04-08T13:00:00Z"
       ],
