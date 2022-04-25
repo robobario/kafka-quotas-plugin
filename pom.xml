@@ -107,6 +107,7 @@
         <skip.surefire.tests>${skipTests}</skip.surefire.tests>
         <jimfs.version>1.2</jimfs.version>
         <junit-pioneer.dependency>1.7.0</junit-pioneer.dependency>
+        <generated-sources-dir>${project.build.directory}/generated-sources/jsonschema2pojo</generated-sources-dir>
     </properties>
 
     <distributionManagement>
@@ -443,7 +444,7 @@
                         </goals>
                         <configuration>
                             <sourcepath>
-                                ${project.build.sourceDirectory}:${project.build.directory}/generated-sources/annotations:${project.build.directory}/generated-sources/jsonschema2pojo
+                                ${project.build.sourceDirectory}:${project.build.directory}/generated-sources/annotations:${generated-sources-dir}
                             </sourcepath>
                             <excludePackageNames>io.strimzi.kafka.quotas.types
                             </excludePackageNames><!-- the generated code fails as it doesn't document @param or @return values -->
@@ -511,12 +512,34 @@
                     <includeSetters>false</includeSetters>
                     <includeGetters>true</includeGetters>
                     <useLongIntegers>true</useLongIntegers>
+                    <outputDirectory>${generated-sources-dir}</outputDirectory>
                 </configuration>
                 <executions>
                     <execution>
                         <goals>
                             <goal>generate</goal>
                         </goals>
+                        <phase>generate-sources</phase>
+                    </execution>
+                </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>build-helper-maven-plugin</artifactId>
+                <version>3.3.0</version>
+                <!-- Not strictly necessary for command line building, but it helps IDE's understand hte project -->
+                <executions>
+                    <execution>
+                        <id>add-source</id>
+                        <phase>generate-sources</phase>
+                        <goals>
+                            <goal>add-source</goal>
+                        </goals>
+                        <configuration>
+                            <sources>
+                                <source>${generated-sources-dir}</source>
+                            </sources>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>
