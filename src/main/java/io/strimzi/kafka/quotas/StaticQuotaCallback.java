@@ -62,7 +62,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private AtomicLong lastLoggedMessageHardTimeMs = new AtomicLong(0);
 
     //Default to no restrictions until things have been configured.
-    private volatile QuotaSupplier staticQuotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
+    private volatile QuotaSupplier quotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
     private volatile QuotaFactorSupplier quotaFactorSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
     private ScheduledFuture<?> dataSourceFuture;
     private ScheduledFuture<?> quotaPolicyFuture;
@@ -109,9 +109,10 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             return QuotaSupplier.UNLIMITED;
         }
 
-        final double requestQuota = staticQuotaSupplier.quotaFor(quotaType, metricTags);
+        final double requestQuota = quotaSupplier.quotaFor(quotaType, metricTags);
         if (ClientQuotaType.PRODUCE.equals(quotaType)) {
-            return requestQuota * quotaFactorSupplier.get();
+            //Kafka will suffer an A divide by zero if returned 0.0 from `quotaLimit` so ensure that we don't even if we have zero quota available
+            return  Math.max(requestQuota * quotaFactorSupplier.get(), 1.0);
         }
         return requestQuota;
     }
@@ -179,7 +180,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     public void configure(Map<String, ?> configs) {
         kafkaClientManager.configure(configs);
         StaticQuotaConfig config = pluginConfigFactory.apply(configs, true).withKafkaClientManager(kafkaClientManager);
-        staticQuotaSupplier = config.quotaSupplier();
+        quotaSupplier = config.quotaSupplier();
         quotaFactorSupplier = config.quotaFactorSupplier();
         storageQuotaSoft = config.getSoftStorageQuota();
         storageQuotaHard = config.getHardStorageQuota();

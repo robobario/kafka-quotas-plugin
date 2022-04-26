@@ -39,6 +39,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static io.strimzi.kafka.quotas.StaticQuotaConfig.QUOTA_POLICY_INTERVAL_PROP;
 import static io.strimzi.kafka.quotas.StaticQuotaConfig.STORAGE_CHECK_INTERVAL_PROP;
+import static io.strimzi.kafka.quotas.TestUtils.EPSILON_OFFSET;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,10 +64,11 @@ import static org.mockito.Mockito.when;
 class StaticQuotaCallbackTest {
 
     private static final String TEST_TOPIC = "wibble";
+    private StaticQuotaCallback target;
+
     @Mock(lenient = true)
     private Admin adminClient;
 
-    StaticQuotaCallback target;
     @Mock(lenient = true)
     private KafkaClientManager kafkaClientManager;
 
@@ -107,6 +109,40 @@ class StaticQuotaCallbackTest {
     }
 
     @Test
+    void shouldApplyQuotaFactor() {
+        //Given
+        KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
+        target = new StaticQuotaCallback(new StorageChecker(),
+            Executors.newSingleThreadScheduledExecutor(),
+            (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.5D)),
+            kafkaClientManager);
+        target.configure(Map.of(StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
+
+        //When
+        double quotaLimit = target.quotaLimit(ClientQuotaType.PRODUCE, target.quotaMetricTags(ClientQuotaType.PRODUCE, foo, "clientId"));
+
+        //Then
+        assertThat(quotaLimit).isEqualTo(512.0, EPSILON_OFFSET);
+    }
+
+    @Test
+    void shouldReturnNonZeroQuota() {
+        //Given
+        KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
+        target = new StaticQuotaCallback(new StorageChecker(),
+            Executors.newSingleThreadScheduledExecutor(),
+            (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.0D)),
+            kafkaClientManager);
+        target.configure(Map.of(StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
+
+        //When
+        double quotaLimit = target.quotaLimit(ClientQuotaType.PRODUCE, target.quotaMetricTags(ClientQuotaType.PRODUCE, foo, "clientId"));
+
+        //Then
+        assertThat(quotaLimit).isEqualTo(1.0, EPSILON_OFFSET);
+    }
+
+    @Test
     void excludedPrincipal() {
         KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
         target.configure(Map.of(StaticQuotaConfig.EXCLUDED_PRINCIPAL_NAME_LIST_PROP, "foo,bar",
@@ -130,6 +166,7 @@ class StaticQuotaCallbackTest {
         verify(storageChecker, times(1)).stop();
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     void quotaResetRequired() {
         StorageChecker mock = mock(StorageChecker.class);
@@ -330,14 +367,37 @@ class StaticQuotaCallbackTest {
         when(createTopicsResult.all()).thenReturn(createTopicFuture);
     }
 
-    //TODO this is still a code smell.
     private StaticQuotaConfig spyOnQuotaConfig(Map<String, ?> config, Boolean doLog) {
+        return spyOnQuotaConfig(config, doLog, UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER);
+    }
+
+    //TODO this is still a code smell.
+    private StaticQuotaConfig spyOnQuotaConfig(Map<String, ?> config, Boolean doLog, QuotaFactorSupplier quotaFactorSupplier) {
         StaticQuotaConfig staticQuotaConfig = spy(new StaticQuotaConfig(config, doLog));
         staticQuotaConfig.withKafkaClientManager(kafkaClientManager);
-        lenient().doReturn(UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER).when(staticQuotaConfig).quotaFactorSupplier();
+        lenient().doReturn(quotaFactorSupplier).when(staticQuotaConfig).quotaFactorSupplier();
         lenient().doReturn((Supplier<Iterable<VolumeUsageMetrics>>) List::of).when(staticQuotaConfig).volumeUsageMetricsSupplier();
         lenient().doReturn((Consumer<VolumeUsageMetrics>) volumeUsageMetrics -> {
         }).when(staticQuotaConfig).volumeUsageMetricsPublisher();
         return staticQuotaConfig;
+    }
+
+    private static class FixedQuotaFactorSupplier implements QuotaFactorSupplier {
+
+        private final double fixedFactor;
+
+        private FixedQuotaFactorSupplier(double factor) {
+            fixedFactor = factor;
+        }
+
+        @Override
+        public void addUpdateListener(Runnable listener) {
+
+        }
+
+        @Override
+        public Double get() {
+            return fixedFactor;
+        }
     }
 }
