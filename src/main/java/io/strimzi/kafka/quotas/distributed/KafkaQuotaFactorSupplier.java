@@ -6,8 +6,8 @@
 package io.strimzi.kafka.quotas.distributed;
 
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.regex.Pattern;
 
@@ -23,7 +23,7 @@ public class KafkaQuotaFactorSupplier implements QuotaFactorSupplier, AutoClosea
 
     private final AtomicLong currentFactor;
 
-    private final List<Runnable> listeners = new ArrayList<>();
+    private final List<Runnable> listeners = new CopyOnWriteArrayList<>();
 
     private static final double EPSILON = 0.00001;
 
