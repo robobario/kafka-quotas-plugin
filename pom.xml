@@ -106,7 +106,7 @@
         <!-- property to skip surefire tests during failsafe execution -->
         <skip.surefire.tests>${skipTests}</skip.surefire.tests>
         <jimfs.version>1.2</jimfs.version>
-        <junit-pioneer.dependency>1.7.0</junit-pioneer.dependency>
+        <junit-pioneer.version>1.7.0</junit-pioneer.version>
         <generated-sources-dir>${project.build.directory}/generated-sources/jsonschema2pojo</generated-sources-dir>
     </properties>
 
@@ -224,7 +224,7 @@
         <dependency>
             <groupId>org.junit-pioneer</groupId>
             <artifactId>junit-pioneer</artifactId>
-            <version>${junit-pioneer.dependency}</version>
+            <version>${junit-pioneer.version}</version>
             <scope>test</scope>
         </dependency>
 
