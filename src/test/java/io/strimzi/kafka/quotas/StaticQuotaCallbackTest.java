@@ -23,12 +23,8 @@ import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.admin.CreateTopicsResult;
-import org.apache.kafka.clients.admin.DescribeTopicsResult;
 import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.clients.admin.TopicDescription;
-import org.apache.kafka.common.KafkaFuture;
 import org.apache.kafka.common.errors.TopicExistsException;
-import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 import org.apache.kafka.common.internals.KafkaFutureImpl;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.quota.ClientQuotaType;
@@ -57,7 +53,6 @@ import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -68,6 +63,8 @@ import static org.mockito.Mockito.when;
 class StaticQuotaCallbackTest {
 
     private static final String TEST_TOPIC = "wibble";
+    @Mock(lenient = true)
+    private Admin adminClient;
 
     StaticQuotaCallback target;
     @Mock(lenient = true)
@@ -78,6 +75,8 @@ class StaticQuotaCallbackTest {
 
     @BeforeEach
     void setup() {
+        when(kafkaClientManager.adminClient()).thenReturn(adminClient);
+
         target = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
     }
 
@@ -287,8 +286,7 @@ class StaticQuotaCallbackTest {
     void shouldRequestNewTopic() {
         //Given
         final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
-        final Admin adminClient = stubDescribeTopicsForMissingTopic();
-        stubCreationOfExistingTopic(adminClient);
+        stubCreationOfMissingTopic();
 
         //When
         final CompletableFuture<Void> topicFuture = staticQuotaCallback.ensureTopicIsAvailable(TEST_TOPIC, spyOnQuotaConfig(Map.of(), false));
@@ -300,25 +298,10 @@ class StaticQuotaCallbackTest {
     }
 
     @Test
-    void shouldNotRequestNewTopic() {
+    void shouldContinueIfTopicExistsAlready() {
         //Given
         final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
-        final Admin adminClient = stubDescribeTopicsForExistingTopic();
-
-        //When
-        final CompletableFuture<Void> topicFuture = staticQuotaCallback.ensureTopicIsAvailable(TEST_TOPIC, spyOnQuotaConfig(Map.of(), false));
-
-        //Then
-        verify(adminClient, never()).createTopics(anyCollection());
-        assertThat(topicFuture).isCompleted();
-    }
-
-    @Test
-    void shouldSurviveTopicCreationRace() {
-        //Given
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
-        final Admin adminClient = stubDescribeTopicsForMissingTopic();
-        stubCreationOfExistingTopic(adminClient);
+        stubCreationOfExistingTopic();
 
         //When
         final CompletableFuture<Void> topicFuture = staticQuotaCallback.ensureTopicIsAvailable(TEST_TOPIC, spyOnQuotaConfig(Map.of(), false));
@@ -329,7 +312,7 @@ class StaticQuotaCallbackTest {
         assertThat(topicFuture).isCompleted();
     }
 
-    private void stubCreationOfExistingTopic(Admin adminClient) {
+    private void stubCreationOfExistingTopic() {
         final KafkaFutureImpl<Void> createTopicFuture = new KafkaFutureImpl<>();
         createTopicFuture.completeExceptionally(new ExecutionException(new TopicExistsException("haha beat you to it...")));
         final CreateTopicsResult createTopicsResult = mock(CreateTopicsResult.class);
@@ -338,27 +321,13 @@ class StaticQuotaCallbackTest {
         when(createTopicsResult.all()).thenReturn(createTopicFuture);
     }
 
-    private Admin stubDescribeTopicsForMissingTopic() {
-        final KafkaFutureImpl<Map<String, TopicDescription>> kafkaFuture = new KafkaFutureImpl<>();
-        kafkaFuture.completeExceptionally(new ExecutionException(new UnknownTopicOrPartitionException()));
+    private void stubCreationOfMissingTopic() {
+        final KafkaFutureImpl<Void> createTopicFuture = new KafkaFutureImpl<>();
+        createTopicFuture.complete(null);
+        final CreateTopicsResult createTopicsResult = mock(CreateTopicsResult.class);
 
-        return stubDescribeTopics(kafkaFuture);
-    }
-
-    private Admin stubDescribeTopicsForExistingTopic() {
-        final KafkaFutureImpl<Map<String, TopicDescription>> kafkaFuture = new KafkaFutureImpl<>();
-        kafkaFuture.complete(Map.of(TEST_TOPIC, new TopicDescription(TEST_TOPIC, false, List.of())));
-
-        return stubDescribeTopics(kafkaFuture);
-    }
-
-    private Admin stubDescribeTopics(KafkaFuture<Map<String, TopicDescription>> kafkaFuture) {
-        final Admin adminClient = mock(Admin.class);
-        when(kafkaClientManager.adminClient()).thenReturn(adminClient);
-        final DescribeTopicsResult describeTopicsResult = mock(DescribeTopicsResult.class);
-        when(describeTopicsResult.all()).thenReturn(kafkaFuture);
-        when(adminClient.describeTopics(anyCollection())).thenReturn(describeTopicsResult);
-        return adminClient;
+        when(adminClient.createTopics(anyCollection())).thenReturn(createTopicsResult);
+        when(createTopicsResult.all()).thenReturn(createTopicFuture);
     }
 
     //TODO this is still a code smell.

@@ -33,7 +33,6 @@ import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.Cluster;
 import org.apache.kafka.common.errors.TopicExistsException;
-import org.apache.kafka.common.errors.UnknownTopicOrPartitionException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.quota.ClientQuotaCallback;
 import org.apache.kafka.server.quota.ClientQuotaEntity;
@@ -179,7 +178,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @Override
     public void configure(Map<String, ?> configs) {
         kafkaClientManager.configure(configs);
-        //TODO config object is shot lived so it can't manage kafka sessions :(
         StaticQuotaConfig config = pluginConfigFactory.apply(configs, true).withKafkaClientManager(kafkaClientManager);
         staticQuotaSupplier = config.quotaSupplier();
         quotaFactorSupplier = config.quotaFactorSupplier();
@@ -234,22 +232,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     /*test*/ CompletableFuture<Void> ensureTopicIsAvailable(String topic, StaticQuotaConfig config) {
         final CompletableFuture<Void> createTopicFuture = new CompletableFuture<>();
         log.info("ensuring {} exists", topic);
-        kafkaClientManager.adminClient()
-                .describeTopics(List.of(topic))
-                .all()
-                .whenComplete((topicConfig, err) -> {
-                    if (err != null && (err instanceof UnknownTopicOrPartitionException || err.getCause() instanceof UnknownTopicOrPartitionException)) {
-                        handleUnknownTopicException(topic, config, createTopicFuture);
-                    } else {
-                        createTopicFuture.complete(null);
-                    }
-                });
-        //TODO should we return this or just wait here?
-        return createTopicFuture;
-    }
-
-    private void handleUnknownTopicException(String topic, StaticQuotaConfig config, CompletableFuture<Void> createTopicFuture) {
-        log.info("Topic {} does not exist. Creating now.", topic);
         final int topicPartitionCount = config.getPartitionCount();
         final List<NewTopic> topics = List.of(new NewTopic(topic, Optional.of(topicPartitionCount), Optional.empty()));
         kafkaClientManager.adminClient()
@@ -264,6 +246,8 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                     log.info("Created topic: {}", topic);
                     createTopicFuture.complete(null);
                 });
+        //TODO should we return this or just wait here?
+        return createTopicFuture;
     }
 
     private void updateUsedStorage(Long newValue) {
