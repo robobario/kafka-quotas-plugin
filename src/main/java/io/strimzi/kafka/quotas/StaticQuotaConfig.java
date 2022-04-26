@@ -54,7 +54,6 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String STORAGE_QUOTA_HARD_PROP = "client.quota.callback.static.storage.hard";
     static final String STORAGE_CHECK_INTERVAL_PROP = "client.quota.callback.static.storage.check-interval";
     static final String QUOTA_POLICY_INTERVAL_PROP = "client.quota.callback.quotaPolicy.check-interval";
-    static final String QUOTA_FACTOR_UPDATE_TOPIC_PATTERN_PROP = "client.quota.callback.quotaFactor.topicPattern";
     static final String VOLUME_USAGE_METRICS_TOPIC_PROP = "client.quota.callback.usageMetrics.topic";
     static final String TOPIC_PARTITION_COUNT_PROP = "client.quota.callback.partitionCount";
 
@@ -79,7 +78,6 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(STORAGE_QUOTA_HARD_PROP, LONG, Long.MAX_VALUE, HIGH, "Soft limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_CHECK_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between storage check runs (in seconds, default of 0 means disabled")
                         .define(QUOTA_POLICY_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between quota policy runs (in seconds, default of 0 means disabled")
-                        .define(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN_PROP, STRING, "__strimzi_quotaFactorUpdate", LOW, "topic used to update new quota factors to apply to requests")
                         .define(VOLUME_USAGE_METRICS_TOPIC_PROP, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
                         .define(TOPIC_PARTITION_COUNT_PROP, INT, "3", LOW, "The number of partitions to use for the topics used by the plugin")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
@@ -139,20 +137,9 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     public QuotaFactorSupplier quotaFactorSupplier() {
         return new InMemoryQuotaFactorSupplier();
-//        final String factorUpdateTopicPattern = getString(QUOTA_FACTOR_UPDATE_TOPIC_PATTERN);
-//        final KafkaConsumer<String, UpdateQuotaFactor> kafkaConsumer = new KafkaConsumer<>(getKafkaConfig(), new StringDeserializer(), new JacksonDeserializer<>(objectMapper, UpdateQuotaFactor.class));
-//        //TODO who closes the consumer?
-//        final KafkaQuotaFactorSupplier kafkaQuotaFactorSupplier = new KafkaQuotaFactorSupplier(factorUpdateTopicPattern, kafkaConsumer);
-//        //TODO should we really start here?
-//        kafkaQuotaFactorSupplier.start();
-//        return kafkaQuotaFactorSupplier;
     }
 
     public Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier() {
-        return rawKafkaConsumer();
-    }
-
-    private Supplier<Iterable<VolumeUsageMetrics>> rawKafkaConsumer() {
         final String volumeUsageMetricsTopic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
         return () -> {
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
