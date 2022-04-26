@@ -76,7 +76,7 @@ public class KafkaClientFactory {
                                     String configKey = String.format("listener.name.%s.%s", kafkaClientConfig.getString(LISTENER_NAME_PROP), p);
                                     String v = getOriginalConfigString(configKey);
                                     return Map.entry(p, Objects.requireNonNullElse(v, ""));
-                                }).filter(e -> !"".equals(e.getValue())),
+                                }).filter(e -> !e.getValue().trim().isEmpty()),
                         Stream.of(Map.entry(CommonClientConfigs.BOOTSTRAP_SERVERS_CONFIG, bootstrapAddress),
                                 Map.entry(CommonClientConfigs.SECURITY_PROTOCOL_CONFIG, kafkaClientConfig.getString(LISTENER_PROTOCOL_PROP))))
                 .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
