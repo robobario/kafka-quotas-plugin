@@ -6,7 +6,6 @@
 package io.strimzi.kafka.quotas.distributed;
 
 import java.io.Closeable;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,7 +46,7 @@ public class KafkaClientManager implements Closeable, Configurable {
     }
 
     @Override
-    public void close() throws IOException {
+    public void close() {
         for (Producer<String, ?> producer : producersByType.values()) {
             try {
                 producer.close();

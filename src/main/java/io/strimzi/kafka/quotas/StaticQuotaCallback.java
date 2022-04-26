@@ -4,8 +4,6 @@
  */
 package io.strimzi.kafka.quotas;
 
-import java.io.IOException;
-import java.io.UncheckedIOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashMap;
@@ -47,6 +45,7 @@ import org.slf4j.LoggerFactory;
 public class StaticQuotaCallback implements ClientQuotaCallback {
     private static final Logger log = LoggerFactory.getLogger(StaticQuotaCallback.class);
     private static final String EXCLUDED_PRINCIPAL_QUOTA_KEY = "excluded-principal-quota-key";
+    public static final String METRICS_SCOPE = "io.strimzi.kafka.quotas.StaticQuotaCallback";
 
     private final AtomicLong storageUsed = new AtomicLong(0);
     private volatile long storageQuotaSoft = Long.MAX_VALUE;
@@ -90,7 +89,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         String group = clazz.getPackageName();
         String type = clazz.getSimpleName();
         String mBeanName = String.format("%s:type=%s,name=%s", group, type, name);
-        return new MetricName(group, type, name, "io.strimzi.kafka.quotas.StaticQuotaCallback", mBeanName);
+        return new MetricName(group, type, name, METRICS_SCOPE, mBeanName);
     }
 
     @Override
@@ -112,7 +111,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         final double requestQuota = quotaSupplier.quotaFor(quotaType, metricTags);
         if (ClientQuotaType.PRODUCE.equals(quotaType)) {
             //Kafka will suffer an A divide by zero if returned 0.0 from `quotaLimit` so ensure that we don't even if we have zero quota available
-            return  Math.max(requestQuota * quotaFactorSupplier.get(), 1.0);
+            return Math.max(requestQuota * quotaFactorSupplier.get(), 1.0);
         }
         return requestQuota;
     }
@@ -162,16 +161,38 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     @Override
     public void close() {
         try {
+            closeExecutorService();
+            closeKafkaClients();
+            closeStorageChecker();
+        } finally {
+            Metrics.defaultRegistry().allMetrics().keySet().stream()
+                    .filter(m -> METRICS_SCOPE.equals(m.getScope()))
+                    .forEach(Metrics.defaultRegistry()::removeMetric);
+        }
+    }
+
+    private void closeExecutorService() {
+        try {
             executorService.shutdownNow();
+        } catch (Exception e) {
+            log.warn("Encountered problem shutting down background executor: {}", e.getMessage(), e);
+        }
+    }
+
+    private void closeKafkaClients() {
+        try {
             kafkaClientManager.close();
+        } catch (Exception e) {
+            log.warn("Encountered problem shutting down Kafka Clients: {}", e.getMessage(), e);
+        }
+    }
+
+    private void closeStorageChecker() {
+        try {
             storageChecker.stop();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new RuntimeException(e);
-        } catch (IOException e) {
-            throw new UncheckedIOException(e);
-        } finally {
-            Metrics.defaultRegistry().allMetrics().keySet().stream().filter(m -> "io.strimzi.kafka.quotas.StaticQuotaCallback".equals(m.getScope())).forEach(Metrics.defaultRegistry()::removeMetric);
         }
     }
 
