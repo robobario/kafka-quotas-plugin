@@ -6,14 +6,14 @@
 package io.strimzi.kafka.quotas.local;
 
 import io.strimzi.kafka.quotas.policy.LimitPolicy;
-import io.strimzi.kafka.quotas.policy.QuotaPolicy;
+import io.strimzi.kafka.quotas.policy.QuotaFactorPolicy;
 import io.strimzi.kafka.quotas.types.Volume;
 
-public class CombinedQuotaPolicy implements QuotaPolicy {
+public class CombinedQuotaFactorPolicy implements QuotaFactorPolicy {
     private final LimitPolicy softLimitPolicy;
     private final LimitPolicy hardLimitPolicy;
 
-    public CombinedQuotaPolicy(LimitPolicy softLimitPolicy, LimitPolicy hardLimitPolicy) {
+    public CombinedQuotaFactorPolicy(LimitPolicy softLimitPolicy, LimitPolicy hardLimitPolicy) {
         this.softLimitPolicy = softLimitPolicy;
         this.hardLimitPolicy = hardLimitPolicy;
     }
@@ -34,7 +34,13 @@ public class CombinedQuotaPolicy implements QuotaPolicy {
         final long hardLimit = hardLimitPolicy.getLimitValue().longValue();
         final long overQuotaUsage = softLimitPolicy.getBreachQuantity(volumeDetails);
         final long quotaCapacity = hardLimit - softLimit;
-        return Math.min(1.0, 1.0 * overQuotaUsage / quotaCapacity);
+        if (softLimitPolicy.breachesLimit(volumeDetails) && quotaCapacity > 0) {
+            return 1.0 - Math.abs(Math.min(1.0, 1.0 * overQuotaUsage / quotaCapacity));
+        } else if (hardLimitPolicy.breachesLimit(volumeDetails)) {
+            return 0.0;
+        } else {
+            return 1.0;
+        }
     }
 
     @Override

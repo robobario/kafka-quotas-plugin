@@ -20,7 +20,7 @@ import io.strimzi.kafka.quotas.policy.ConsumedBytesLimitPolicy;
 import io.strimzi.kafka.quotas.policy.LimitPolicy;
 import io.strimzi.kafka.quotas.policy.MinFreeBytesLimitPolicy;
 import io.strimzi.kafka.quotas.policy.MinFreePercentageLimitPolicy;
-import io.strimzi.kafka.quotas.policy.QuotaPolicy;
+import io.strimzi.kafka.quotas.policy.QuotaFactorPolicy;
 import io.strimzi.kafka.quotas.policy.UnlimitedPolicy;
 import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
@@ -68,7 +68,34 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
 
     @Override
     public void run() {
-        double quotaFactor = 0.0D;
+        updateMetricsCache();
+        double quotaRemaining = 1.0D;
+        final Collection<String> activeBrokers = activeBrokerIdsSupplier.get();
+        log.info("checking volume usage for {}", activeBrokers);
+        for (String brokerId : activeBrokers) {
+            final VolumeUsageMetrics brokerSnapshot = mostRecentMetricsPerBroker.get(brokerId);
+            if (brokerSnapshot == null) {
+                quotaRemaining = 0.0D;
+                break;
+            }
+            final QuotaFactorPolicy quotaFactorPolicy = mapLimitsToQuotaPolicy(brokerSnapshot);
+            for (Volume volume : brokerSnapshot.getVolumes()) {
+                if (quotaFactorPolicy.breachesHardLimit(volume)) {
+                    quotaRemaining = quotaFactorPolicy.quotaFactor(volume);
+                    break;
+                }
+                quotaRemaining = Math.min(quotaRemaining, quotaFactorPolicy.quotaFactor(volume));
+            }
+        }
+        double updatedQuotaFactor = quotaRemaining;
+        log.info("Broker volume usage check complete applying quota factor: {}", updatedQuotaFactor);
+        final UpdateQuotaFactor updateMessage = new UpdateQuotaFactor(Instant.now(), updatedQuotaFactor);
+        for (Consumer<UpdateQuotaFactor> updateListener : updateListeners) {
+            updateListener.accept(updateMessage);
+        }
+    }
+
+    private void updateMetricsCache() {
         for (VolumeUsageMetrics metricsUpdate : volumeUsageMetricsSupplier.get()) {
             //Use putIfAbsent & replace to ensure we don't consider stale data
             final VolumeUsageMetrics lastKnown = mostRecentMetricsPerBroker.putIfAbsent(metricsUpdate.getBrokerId(), metricsUpdate);
@@ -77,34 +104,12 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
                 mostRecentMetricsPerBroker.replace(metricsUpdate.getBrokerId(), lastKnown, metricsUpdate);
             }
         }
-        final Collection<String> activeBrokers = activeBrokerIdsSupplier.get();
-        log.info("checking volume usage for {}", activeBrokers);
-        for (String brokerId : activeBrokers) {
-            final VolumeUsageMetrics brokerSnapshot = mostRecentMetricsPerBroker.get(brokerId);
-            if (brokerSnapshot == null) {
-                quotaFactor = 1.0D;
-                break;
-            }
-            final QuotaPolicy quotaPolicy = mapLimitsToQuotaPolicy(brokerSnapshot);
-            for (Volume volume : brokerSnapshot.getVolumes()) {
-                if (quotaPolicy.breachesHardLimit(volume)) {
-                    quotaFactor = quotaPolicy.quotaFactor(volume);
-                    break;
-                }
-                quotaFactor = Math.max(quotaFactor, quotaPolicy.quotaFactor(volume));
-            }
-        }
-        quotaFactor = 1.0 - quotaFactor;
-        log.info("Broker volume usage check complete applying quota factor: {}", quotaFactor);
-        for (Consumer<UpdateQuotaFactor> updateListener : updateListeners) {
-            updateListener.accept(new UpdateQuotaFactor(Instant.now(), quotaFactor));
-        }
     }
 
-    QuotaPolicy mapLimitsToQuotaPolicy(VolumeUsageMetrics usageMetrics) {
+    QuotaFactorPolicy mapLimitsToQuotaPolicy(VolumeUsageMetrics usageMetrics) {
         LimitPolicy softLimitPolicy = mapToLimitPolicy(usageMetrics.getSoftLimit());
         LimitPolicy hardLimitPolicy = mapToLimitPolicy(usageMetrics.getHardLimit());
-        return new CombinedQuotaPolicy(softLimitPolicy, hardLimitPolicy);
+        return new CombinedQuotaFactorPolicy(softLimitPolicy, hardLimitPolicy);
     }
 
     private LimitPolicy mapToLimitPolicy(Limit limit) {

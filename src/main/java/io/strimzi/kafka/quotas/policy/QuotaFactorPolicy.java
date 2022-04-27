@@ -9,7 +9,7 @@ import io.strimzi.kafka.quotas.types.Volume;
 /**
  * Abstracts the decision-making around hard and soft limits and how to calculate the effect the impact breaching the limits has on the client request.
  */
-public interface QuotaPolicy {
+public interface QuotaFactorPolicy {
 
     /**
      * Does the particular volume breach this policy's defined hard limit.
