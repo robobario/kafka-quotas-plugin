@@ -12,7 +12,14 @@ import java.util.concurrent.TimeUnit;
  * It is up to the Task 
  */
 public interface DataSourceTask extends Runnable {
+
+    /**
+     * @return The amount of time between executions of the task.
+     */
     long getPeriod();
 
+    /**
+     * @return The time unit to quantify the time between executions.
+     */
     TimeUnit getPeriodUnit();
 }
