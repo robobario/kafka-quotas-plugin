@@ -112,9 +112,9 @@ class StaticQuotaCallbackTest {
         //Given
         KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
         target = new StaticQuotaCallback(new StorageChecker(),
-                Executors.newSingleThreadScheduledExecutor(),
-                (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.5D)),
-                kafkaClientManager);
+            Executors.newSingleThreadScheduledExecutor(),
+            (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.5D)),
+            kafkaClientManager);
         target.configure(Map.of(StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
 
         //When
@@ -129,9 +129,9 @@ class StaticQuotaCallbackTest {
         //Given
         KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
         target = new StaticQuotaCallback(new StorageChecker(),
-                Executors.newSingleThreadScheduledExecutor(),
-                (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.0D)),
-                kafkaClientManager);
+            Executors.newSingleThreadScheduledExecutor(),
+            (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.0D)),
+            kafkaClientManager);
         target.configure(Map.of(StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
 
         //When
