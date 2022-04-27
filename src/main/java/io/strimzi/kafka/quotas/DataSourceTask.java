@@ -7,6 +7,10 @@ package io.strimzi.kafka.quotas;
 
 import java.util.concurrent.TimeUnit;
 
+/**
+ * Describes a repeatable task which generates metrics for the plugin to act on.
+ * It is up to the Task 
+ */
 public interface DataSourceTask extends Runnable {
     long getPeriod();
 

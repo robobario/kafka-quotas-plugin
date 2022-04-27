@@ -44,6 +44,9 @@ import static org.apache.kafka.common.config.ConfigDef.Type.STRING;
 
 /**
  * Configuration for the static quota plugin.
+ * It also serves as a pseudo dependency injection service by supplying configuration details and creating instances.
+ * <p>
+ * Note the config object has a short lifetime so instances which have a long lifecycle need to be constructed via a factory and managed externally.
  */
 public class StaticQuotaConfig extends AbstractConfig {
     static final String PRODUCE_QUOTA_PROP = "client.quota.callback.static.produce";
@@ -85,6 +88,12 @@ public class StaticQuotaConfig extends AbstractConfig {
                 doLog);
     }
 
+    /**
+     * Injects the kafka client manager which handles construction of the kafka clients and manages their lifecycle.
+     *
+     * @param kafkaClientManager The client factory instance
+     * @return this for use in a fluent builder style.
+     */
     public StaticQuotaConfig withKafkaClientManager(KafkaClientManager kafkaClientManager) {
         this.kafkaClientManager = kafkaClientManager;
         return this;
@@ -135,15 +144,24 @@ public class StaticQuotaConfig extends AbstractConfig {
         return getList(EXCLUDED_PRINCIPAL_NAME_LIST_PROP);
     }
 
+    /**
+     * @return The configured source for quotaFactors
+     */
     public QuotaFactorSupplier quotaFactorSupplier() {
         return new InMemoryQuotaFactorSupplier();
     }
 
+    /**
+     * @return The configured source of VolumeUsageMetrics
+     */
     public Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier() {
         final String volumeUsageMetricsTopic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
+        //Note its important that the call to `consumerFor` happens in the supplier instance so that it doesn't
+        //get triggered on the thread calling configure and blocking broker start up.
         return () -> {
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
-            //TODO nasty doing this in the supplier should really be done async
+            //TODO nasty doing this in the supplier should potentially be done async.
+            //As callers of the supplier don't necessarily expect blocking operations.
             kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class)
                     .poll(Duration.of(10, ChronoUnit.SECONDS))
                     .records(volumeUsageMetricsTopic)
@@ -152,24 +170,39 @@ public class StaticQuotaConfig extends AbstractConfig {
         };
     }
 
+    /**
+     * @return The configured quota source.
+     */
     public QuotaSupplier quotaSupplier() {
         return new StaticQuotaSupplier(getQuotaMap());
     }
 
+    /**
+     * @return The <a href="https://kafka.apache.org/30/javadoc/org/apache/kafka/common/Node.html#idString()">idString</a> representing the local broker.
+     */
     public String getBrokerId() {
         //Arguably in-efficient to look up the sys prop if we don't need it, but it reads better and is invoked rarely
         final String brokerIdFromSysProps = System.getProperty("broker.id", "-1");
         return (String) originals().getOrDefault("broker.id", brokerIdFromSysProps);
     }
 
+    /**
+     *
+     * @return a function which accepts a volume metrics snapshot and sends it to the configured destination
+     */
     public Consumer<VolumeUsageMetrics> volumeUsageMetricsPublisher() {
         //TODO connection status metrics
         final String brokerId = getBrokerId();
         final String topic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
-
+        //Note its important that the call to `producer` happens in the supplier instance so that it doesn't
+        //get triggered on the thread calling configure and blocking broker start up.
         return snapshot -> kafkaClientManager.producer(VolumeUsageMetrics.class).send(new ProducerRecord<>(topic, brokerId, snapshot));
     }
 
+    /**
+     *
+     * @return A function which resolves the set of nodeId's which Kafka considers to be part of the cluster
+     */
     public Supplier<Collection<String>> activeBrokerSupplier() {
         return () -> {
             try {

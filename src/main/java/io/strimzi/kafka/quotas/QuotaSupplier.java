@@ -9,6 +9,9 @@ import java.util.Map;
 
 import org.apache.kafka.server.quota.ClientQuotaType;
 
+/**
+ * Abstraction to allow the quota details to be calculated or sourced from an external system. Such as Zookeeper (as envisaged by <a href="https://cwiki.apache.org/confluence/display/KAFKA/KIP-257+-+Configurable+Quota+Management">KIP-257</a>) or another service in the cluster
+ */
 public interface QuotaSupplier {
 
     double UNLIMITED = Double.MAX_VALUE;
@@ -16,11 +19,11 @@ public interface QuotaSupplier {
 
     /**
      * For the given quotaType and tags determine what the configured quota is.
-     *
+     * <p>
      * The quota returned by this call is expected to be stable and represent the best case limit for a given request.
      * If there is no limit for the request implementations are expected to return {@code io.strimzi.kafka.quotas.QuotaSupplier#UNLIMITED}
      *
-     * @param quotaType -  Type of quota requested
+     * @param quotaType  -  Type of quota requested
      * @param metricTags - Metric tags for a quota metric of type `quotaType`
      * @return the quota in bytes per second
      */

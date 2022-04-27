@@ -111,7 +111,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         final double requestQuota = quotaSupplier.quotaFor(quotaType, metricTags);
         if (ClientQuotaType.PRODUCE.equals(quotaType)) {
             //Kafka will suffer an A divide by zero if returned 0.0 from `quotaLimit` so ensure that we don't even if we have zero quota available
-            return Math.max(requestQuota * quotaFactorSupplier.get(), 1.0);
+            return Math.max(requestQuota * quotaFactorSupplier.get(), QuotaSupplier.PAUSED);
         }
         return requestQuota;
     }
@@ -245,7 +245,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
             }, 0, TimeUnit.SECONDS);
             quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 0, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
         }
-        //TODO This doesn't really make sense to log here any more, but is useful to have
         if (!excludedPrincipalNameList.isEmpty()) {
             log.info("Excluded principals {}", excludedPrincipalNameList);
         }
