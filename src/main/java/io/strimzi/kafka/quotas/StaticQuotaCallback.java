@@ -30,6 +30,7 @@ import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.Cluster;
+import org.apache.kafka.common.config.TopicConfig;
 import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.quota.ClientQuotaCallback;
@@ -254,7 +255,9 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         final CompletableFuture<Void> createTopicFuture = new CompletableFuture<>();
         log.info("ensuring {} exists", topic);
         final int topicPartitionCount = config.getPartitionCount();
-        final List<NewTopic> topics = List.of(new NewTopic(topic, Optional.of(topicPartitionCount), Optional.empty()));
+        final NewTopic newTopic = new NewTopic(topic, Optional.of(topicPartitionCount), Optional.empty());
+        newTopic.configs(Map.of(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT));
+        final List<NewTopic> topics = List.of(newTopic);
         kafkaClientManager.adminClient()
                 .createTopics(topics)
                 .all()

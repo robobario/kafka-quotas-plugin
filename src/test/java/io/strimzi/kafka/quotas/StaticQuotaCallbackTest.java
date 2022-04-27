@@ -322,6 +322,8 @@ class StaticQuotaCallbackTest {
     void shouldRequestNewTopic() {
         //Given
         final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
+        final NewTopic expectedNewTopic = new NewTopic(TEST_TOPIC, Optional.of(1), Optional.empty());
+        expectedNewTopic.configs(Map.of("cleanup.policy", "compact"));
         stubCreationOfMissingTopic();
 
         //When
@@ -329,7 +331,7 @@ class StaticQuotaCallbackTest {
 
         //Then
         verify(adminClient).createTopics(newTopicsCaptor.capture());
-        assertThat(newTopicsCaptor.getValue()).contains(new NewTopic(TEST_TOPIC, Optional.of(1), Optional.empty()));
+        assertThat(newTopicsCaptor.getValue()).containsExactly(expectedNewTopic);
         assertThat(topicFuture).isCompleted();
     }
 
@@ -343,8 +345,7 @@ class StaticQuotaCallbackTest {
         final CompletableFuture<Void> topicFuture = staticQuotaCallback.ensureTopicIsAvailable(TEST_TOPIC, spyOnQuotaConfig(Map.of(), false));
 
         //Then
-        verify(adminClient).createTopics(newTopicsCaptor.capture());
-        assertThat(newTopicsCaptor.getValue()).contains(new NewTopic(TEST_TOPIC, Optional.of(1), Optional.empty()));
+        verify(adminClient).createTopics(anyCollection());
         assertThat(topicFuture).isCompleted();
     }
 
