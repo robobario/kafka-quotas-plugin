@@ -256,7 +256,7 @@ class StaticQuotaCallbackTest {
         staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, interval.intValue()));
 
         //Then
-        verify(executorService).scheduleWithFixedDelay(isA(QuotaPolicyTask.class), anyLong(), eq(interval), eq(TimeUnit.SECONDS));
+        verify(executorService).scheduleWithFixedDelay(isA(QuotaFactorPolicyTask.class), anyLong(), eq(interval), eq(TimeUnit.SECONDS));
     }
 
     @Test
@@ -265,7 +265,7 @@ class StaticQuotaCallbackTest {
         final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
         final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), executorService, this::spyOnQuotaConfig, kafkaClientManager);
         final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
-        doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(QuotaPolicyTask.class), anyLong(), anyLong(), any());
+        doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(QuotaFactorPolicyTask.class), anyLong(), anyLong(), any());
         final int interval = 10;
         staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, interval));
 

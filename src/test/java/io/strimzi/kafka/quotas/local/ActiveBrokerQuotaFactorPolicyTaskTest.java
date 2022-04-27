@@ -20,17 +20,17 @@ import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-class ActiveBrokerQuotaPolicyTaskTest {
+class ActiveBrokerQuotaFactorPolicyTaskTest {
 
     public static final long SOFT_LIMIT = 5L;
     public static final long HARD_LIMIT = 10L;
-    private ActiveBrokerQuotaPolicyTask quotaPolicyTask;
+    private ActiveBrokerQuotaFactorPolicyTask quotaPolicyTask;
     private VolumeUsageMetrics volumeUsageMetrics;
 
     @BeforeEach
     void setUp() {
         volumeUsageMetrics = generateUsageMetrics("-1", TestUtils.newVolumeWith(8L));
-        quotaPolicyTask = new ActiveBrokerQuotaPolicyTask(10, () -> List.of(volumeUsageMetrics), () -> List.of("-1"));
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(volumeUsageMetrics), () -> List.of("-1"));
     }
 
     @Test
@@ -69,7 +69,7 @@ class ActiveBrokerQuotaPolicyTaskTest {
         final VolumeUsageMetrics brokerBMetrics = generateUsageMetrics("2", TestUtils.newVolumeWith(5L), TestUtils.newVolumeWith(HARD_LIMIT));
         final double expectedFactor = 0.0;
         final Double[] updates = new Double[1];
-        quotaPolicyTask = new ActiveBrokerQuotaPolicyTask(10, () -> List.of(broker1Metrics, brokerBMetrics), () -> List.of("1", "2"));
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics, brokerBMetrics), () -> List.of("1", "2"));
         quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
@@ -101,7 +101,7 @@ class ActiveBrokerQuotaPolicyTaskTest {
         final VolumeUsageMetrics broker2Metrics = generateUsageMetrics("2", TestUtils.newVolumeWith(7L), TestUtils.newVolumeWith(8L));
         final double expectedFactor = 0.4;
         final Double[] updates = new Double[1];
-        quotaPolicyTask = new ActiveBrokerQuotaPolicyTask(10, () -> List.of(broker1Metrics, broker2Metrics), () -> List.of("1", "2"));
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics, broker2Metrics), () -> List.of("1", "2"));
         quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
@@ -117,7 +117,7 @@ class ActiveBrokerQuotaPolicyTaskTest {
         final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", TestUtils.newVolumeWith(7L), TestUtils.newVolumeWith(8L));
         final VolumeUsageMetrics broker2Metrics = generateUsageMetrics("2", TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
         final List<VolumeUsageMetrics> currentMetrics = new ArrayList<>();
-        quotaPolicyTask = new ActiveBrokerQuotaPolicyTask(10, () -> currentMetrics, () -> List.of("1", "2"));
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> currentMetrics, () -> List.of("1", "2"));
         final double expectedFactor = 0.4;
         final Double[] updates = new Double[1];
 
@@ -144,7 +144,7 @@ class ActiveBrokerQuotaPolicyTaskTest {
         final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
         final double expectedFactor = 0.0;
         final Double[] updates = new Double[1];
-        quotaPolicyTask = new ActiveBrokerQuotaPolicyTask(10, () -> List.of(broker1Metrics), () -> List.of("1", "2"));
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics), () -> List.of("1", "2"));
         quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When

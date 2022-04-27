@@ -25,7 +25,7 @@ import java.util.stream.Collectors;
 import com.yammer.metrics.Metrics;
 import com.yammer.metrics.core.MetricName;
 import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
-import io.strimzi.kafka.quotas.local.ActiveBrokerQuotaPolicyTask;
+import io.strimzi.kafka.quotas.local.ActiveBrokerQuotaFactorPolicyTask;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import org.apache.kafka.clients.admin.NewTopic;
@@ -229,9 +229,9 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
         //TODO add separate poll interval for quota policy
         if (config.getQuotaPolicyInterval() > 0) {
-            final QuotaPolicyTask quotaPolicyTask = new ActiveBrokerQuotaPolicyTask(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier());
+            final QuotaFactorPolicyTask quotaFactorPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier());
             if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
-                quotaPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
+                quotaFactorPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }
             String topic = config.getVolumeUsageMetricsTopic();
             executorService.schedule(() -> {
@@ -244,7 +244,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                     log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e);
                 }
             }, 0, TimeUnit.SECONDS);
-            quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaPolicyTask, 0, quotaPolicyTask.getPeriod(), quotaPolicyTask.getPeriodUnit());
+            quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaFactorPolicyTask, 0, quotaFactorPolicyTask.getPeriod(), quotaFactorPolicyTask.getPeriodUnit());
         }
         if (!excludedPrincipalNameList.isEmpty()) {
             log.info("Excluded principals {}", excludedPrincipalNameList);

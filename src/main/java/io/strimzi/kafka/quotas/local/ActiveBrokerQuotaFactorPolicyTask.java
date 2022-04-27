@@ -15,7 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
-import io.strimzi.kafka.quotas.QuotaPolicyTask;
+import io.strimzi.kafka.quotas.QuotaFactorPolicyTask;
 import io.strimzi.kafka.quotas.policy.ConsumedBytesLimitPolicy;
 import io.strimzi.kafka.quotas.policy.LimitPolicy;
 import io.strimzi.kafka.quotas.policy.MinFreeBytesLimitPolicy;
@@ -33,7 +33,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 /**
  * Determines the active set of brokers on every invocation and calculates the most restrictive quota factor based on the volume usage of those brokers.
  */
-public class ActiveBrokerQuotaPolicyTask implements QuotaPolicyTask {
+public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask {
     private final int periodInSeconds;
     private final Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier;
     private final Supplier<Collection<String>> activeBrokerIdsSupplier;
@@ -41,9 +41,9 @@ public class ActiveBrokerQuotaPolicyTask implements QuotaPolicyTask {
 
     private final ConcurrentMap<String, VolumeUsageMetrics> mostRecentMetricsPerBroker;
 
-    private final Logger log = getLogger(ActiveBrokerQuotaPolicyTask.class);
+    private final Logger log = getLogger(ActiveBrokerQuotaFactorPolicyTask.class);
 
-    public ActiveBrokerQuotaPolicyTask(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier, Supplier<Collection<String>> activeBrokerIdsSupplier) {
+    public ActiveBrokerQuotaFactorPolicyTask(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier, Supplier<Collection<String>> activeBrokerIdsSupplier) {
         this.periodInSeconds = periodInSeconds;
         this.volumeUsageMetricsSupplier = volumeUsageMetricsSupplier;
         this.activeBrokerIdsSupplier = activeBrokerIdsSupplier;

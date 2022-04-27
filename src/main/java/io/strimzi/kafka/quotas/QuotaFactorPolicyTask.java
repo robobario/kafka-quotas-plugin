@@ -13,7 +13,7 @@ import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 /**
  *  Describes a repeatable task which consumes the published metrics for the cluster and determines the currently applicable quota Factor
  */
-public interface QuotaPolicyTask extends Runnable {
+public interface QuotaFactorPolicyTask extends Runnable {
     long getPeriod();
 
     TimeUnit getPeriodUnit();
