@@ -5,7 +5,6 @@
 package io.strimzi.kafka.quotas;
 
 import java.time.Duration;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
@@ -58,7 +57,8 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String STORAGE_CHECK_INTERVAL_PROP = "client.quota.callback.static.storage.check-interval";
     static final String QUOTA_POLICY_INTERVAL_PROP = "client.quota.callback.quotaPolicy.check-interval";
     static final String VOLUME_USAGE_METRICS_TOPIC_PROP = "client.quota.callback.usageMetrics.topic";
-    static final String TOPIC_PARTITION_COUNT_PROP = "client.quota.callback.partitionCount";
+    static final String TOPIC_PARTITION_COUNT_PROP = "client.quota.callback.kafka.partitionCount";
+    static final String KAFKA_READ_TIMEOUT_SECONDS_PROP = "client.quota.callback.kafka.readTimeout";
 
     static final String LOG_DIRS_PROP = "log.dirs";
 
@@ -82,7 +82,8 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(STORAGE_CHECK_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between storage check runs (in seconds, default of 0 means disabled")
                         .define(QUOTA_POLICY_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between quota policy runs (in seconds, default of 0 means disabled")
                         .define(VOLUME_USAGE_METRICS_TOPIC_PROP, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
-                        .define(TOPIC_PARTITION_COUNT_PROP, INT, "3", LOW, "The number of partitions to use for the topics used by the plugin")
+                        .define(TOPIC_PARTITION_COUNT_PROP, INT, "1", LOW, "The number of partitions to use for the topics used by the plugin")
+                        .define(KAFKA_READ_TIMEOUT_SECONDS_PROP, INT, "10", LOW, "How long should the plugin wait for kafka interactions")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
                 props,
                 doLog);
@@ -163,7 +164,7 @@ public class StaticQuotaConfig extends AbstractConfig {
             //TODO nasty doing this in the supplier should potentially be done async.
             //As callers of the supplier don't necessarily expect blocking operations.
             kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class)
-                    .poll(Duration.of(10, ChronoUnit.SECONDS))
+                    .poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
                     .records(volumeUsageMetricsTopic)
                     .forEach(cr -> usageMetrics.add(cr.value()));
             return usageMetrics;
@@ -178,7 +179,7 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     /**
-     * @return The <a href="https://kafka.apache.org/30/javadoc/org/apache/kafka/common/Node.html#idString()">idString</a> representing the local broker.
+     * @return The <a href="https://kafka.apache.org/30/javadoc/org/apache/kafka/common/Node.html#idString%28%29">idString</a> representing the local broker.
      */
     public String getBrokerId() {
         //Arguably in-efficient to look up the sys prop if we don't need it, but it reads better and is invoked rarely
@@ -206,7 +207,7 @@ public class StaticQuotaConfig extends AbstractConfig {
     public Supplier<Collection<String>> activeBrokerSupplier() {
         return () -> {
             try {
-                return kafkaClientManager.adminClient().describeCluster().nodes().thenApply(nodes -> nodes.stream().map(Node::idString).collect(Collectors.toSet())).get(1, TimeUnit.SECONDS);
+                return kafkaClientManager.adminClient().describeCluster().nodes().thenApply(nodes -> nodes.stream().map(Node::idString).collect(Collectors.toSet())).get(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP), TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 log.warn("unable to get current set of active brokers: {}", e.getMessage(), e);

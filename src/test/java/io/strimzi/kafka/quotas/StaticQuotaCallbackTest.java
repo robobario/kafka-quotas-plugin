@@ -4,7 +4,6 @@
  */
 package io.strimzi.kafka.quotas;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -113,9 +112,9 @@ class StaticQuotaCallbackTest {
         //Given
         KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
         target = new StaticQuotaCallback(new StorageChecker(),
-            Executors.newSingleThreadScheduledExecutor(),
-            (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.5D)),
-            kafkaClientManager);
+                Executors.newSingleThreadScheduledExecutor(),
+                (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.5D)),
+                kafkaClientManager);
         target.configure(Map.of(StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
 
         //When
@@ -130,9 +129,9 @@ class StaticQuotaCallbackTest {
         //Given
         KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
         target = new StaticQuotaCallback(new StorageChecker(),
-            Executors.newSingleThreadScheduledExecutor(),
-            (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.0D)),
-            kafkaClientManager);
+                Executors.newSingleThreadScheduledExecutor(),
+                (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.0D)),
+                kafkaClientManager);
         target.configure(Map.of(StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
 
         //When
@@ -293,7 +292,7 @@ class StaticQuotaCallbackTest {
     }
 
     @Test
-    void shouldPropagateCloseToKafkaClientManager() throws IOException {
+    void shouldPropagateCloseToKafkaClientManager() {
         //Given
         final KafkaClientManager kafkaClientManager = mock(KafkaClientManager.class);
         final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(new StorageChecker(), Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
@@ -330,7 +329,7 @@ class StaticQuotaCallbackTest {
 
         //Then
         verify(adminClient).createTopics(newTopicsCaptor.capture());
-        assertThat(newTopicsCaptor.getValue()).contains(new NewTopic(TEST_TOPIC, Optional.of(3), Optional.empty()));
+        assertThat(newTopicsCaptor.getValue()).contains(new NewTopic(TEST_TOPIC, Optional.of(1), Optional.empty()));
         assertThat(topicFuture).isCompleted();
     }
 
@@ -345,7 +344,7 @@ class StaticQuotaCallbackTest {
 
         //Then
         verify(adminClient).createTopics(newTopicsCaptor.capture());
-        assertThat(newTopicsCaptor.getValue()).contains(new NewTopic(TEST_TOPIC, Optional.of(3), Optional.empty()));
+        assertThat(newTopicsCaptor.getValue()).contains(new NewTopic(TEST_TOPIC, Optional.of(1), Optional.empty()));
         assertThat(topicFuture).isCompleted();
     }
 
