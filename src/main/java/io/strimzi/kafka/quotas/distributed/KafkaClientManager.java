@@ -12,6 +12,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
 
+import io.strimzi.kafka.quotas.StaticQuotaConfig;
 import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
@@ -35,6 +36,7 @@ public class KafkaClientManager implements Closeable, Configurable {
 
     private final Logger log = getLogger(KafkaClientManager.class);
     private KafkaClientFactory kafkaClientFactory;
+    private String brokerId;
 
     public KafkaClientManager() {
         this(KafkaClientFactory::new);
@@ -72,7 +74,9 @@ public class KafkaClientManager implements Closeable, Configurable {
 
     @Override
     public void configure(Map<String, ?> configs) {
-        kafkaClientFactory = this.kafkaClientFactorySupplier.apply(new KafkaClientConfig(configs, true));
+        final KafkaClientConfig kafkaClientConfig = new KafkaClientConfig(configs, true);
+        kafkaClientFactory = this.kafkaClientFactorySupplier.apply(kafkaClientConfig);
+        brokerId = StaticQuotaConfig.getBrokerIdFrom(kafkaClientConfig.originals());
     }
 
     @SuppressWarnings("unchecked")
@@ -89,7 +93,12 @@ public class KafkaClientManager implements Closeable, Configurable {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
         //TODO connection status metrics
-        final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> kafkaClientFactory.newConsumer(Map.of(ConsumerConfig.GROUP_ID_CONFIG, messageType.getSimpleName()), key));
+        final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> {
+            final Map<String, Object> customConfig = Map.of(
+                    ConsumerConfig.GROUP_ID_CONFIG, messageType.getSimpleName() + "-" + brokerId,
+                    ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
+            return kafkaClientFactory.newConsumer(customConfig, key);
+        });
 
         kafkaConsumer.subscribe(List.of(topic));
         return kafkaConsumer;

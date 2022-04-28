@@ -186,9 +186,13 @@ public class StaticQuotaConfig extends AbstractConfig {
      * @return The <a href="https://kafka.apache.org/30/javadoc/org/apache/kafka/common/Node.html#idString%28%29">idString</a> representing the local broker.
      */
     public String getBrokerId() {
+        return getBrokerIdFrom(originals());
+    }
+
+    public static String getBrokerIdFrom(Map<String, Object> configMap) {
         //Arguably in-efficient to look up the sys prop if we don't need it, but it reads better and is invoked rarely
         final String brokerIdFromSysProps = System.getProperty("broker.id", "-1");
-        return (String) originals().getOrDefault("broker.id", brokerIdFromSysProps);
+        return (String) configMap.getOrDefault("broker.id", brokerIdFromSysProps);
     }
 
     /**
