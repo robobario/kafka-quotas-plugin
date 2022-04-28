@@ -95,6 +95,7 @@ public class FileSystemDataSourceTask implements DataSourceTask {
 
     @Override
     public void run() {
+        log.debug("check filesystem usage");
         final Instant snapshotAt = Instant.now();
         final LongAdder currentConsumedSpace = new LongAdder();
         final List<Volume> volumes = fileStores.stream()
@@ -111,7 +112,9 @@ public class FileSystemDataSourceTask implements DataSourceTask {
                 .filter(Objects::nonNull)
                 .collect(Collectors.toUnmodifiableList());
         totalConsumedSpace.set(currentConsumedSpace.longValue());
-        volumeUsageMetricsConsumer.accept(new VolumeUsageMetrics(brokerId, snapshotAt, hardLimit, softLimit, volumes));
+        final VolumeUsageMetrics volumeUsageMetrics = new VolumeUsageMetrics(brokerId, snapshotAt, hardLimit, softLimit, volumes);
+        log.debug("publishing volume usage metrics: {}", volumeUsageMetrics);
+        volumeUsageMetricsConsumer.accept(volumeUsageMetrics);
     }
 
 }

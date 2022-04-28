@@ -202,7 +202,11 @@ public class StaticQuotaConfig extends AbstractConfig {
         //get triggered on the thread calling configure and blocking broker start up.
         return snapshot -> {
             try {
-                kafkaClientManager.producer(VolumeUsageMetrics.class).send(new ProducerRecord<>(topic, brokerId, snapshot));
+                kafkaClientManager.producer(VolumeUsageMetrics.class).send(new ProducerRecord<>(topic, brokerId, snapshot), (metadata, exception) -> {
+                    if (exception != null) {
+                        log.warn("unable to publish message due to: {}", exception.getMessage());
+                    }
+                });
             } catch (IllegalStateException e) {
                 log.warn("Unable to send message: {}", e.getMessage());
             }

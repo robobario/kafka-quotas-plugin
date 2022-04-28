@@ -239,9 +239,9 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                     ensureTopicIsAvailable(topic, config).get();
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
-                    log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e);
+                    log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage());
                 } catch (ExecutionException e) {
-                    log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e);
+                    log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage());
                 }
             }, 0, TimeUnit.SECONDS);
             quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaFactorPolicyTask, 0, quotaFactorPolicyTask.getPeriod(), quotaFactorPolicyTask.getPeriodUnit());

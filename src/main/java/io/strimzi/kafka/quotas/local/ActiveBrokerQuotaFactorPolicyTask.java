@@ -71,10 +71,12 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
         updateMetricsCache();
         double quotaRemaining = 1.0D;
         final Collection<String> activeBrokers = activeBrokerIdsSupplier.get();
-        log.info("checking volume usage for {}", activeBrokers);
+        log.info("checking volume usage for brokerIds: {}", activeBrokers);
         for (String brokerId : activeBrokers) {
             final VolumeUsageMetrics brokerSnapshot = mostRecentMetricsPerBroker.get(brokerId);
             if (brokerSnapshot == null) {
+                log.warn("no metrics found for {} setting quotaFactor to 0.0", brokerId);
+                log.debug("no metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
                 quotaRemaining = 0.0D;
                 break;
             }
@@ -82,6 +84,7 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
             for (Volume volume : brokerSnapshot.getVolumes()) {
                 if (quotaFactorPolicy.breachesHardLimit(volume)) {
                     quotaRemaining = quotaFactorPolicy.quotaFactor(volume);
+                    log.warn("hard limit breach for {}:{} setting quotaFactor to 0.0", brokerId, volume.getVolumeName());
                     break;
                 }
                 quotaRemaining = Math.min(quotaRemaining, quotaFactorPolicy.quotaFactor(volume));
@@ -97,11 +100,14 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
 
     private void updateMetricsCache() {
         for (VolumeUsageMetrics metricsUpdate : volumeUsageMetricsSupplier.get()) {
+            log.debug("checking if {} is current", metricsUpdate);
             //Use putIfAbsent & replace to ensure we don't consider stale data
             final VolumeUsageMetrics lastKnown = mostRecentMetricsPerBroker.putIfAbsent(metricsUpdate.getBrokerId(), metricsUpdate);
             if (lastKnown != null && metricsUpdate.getSnapshotAt().isAfter(lastKnown.getSnapshotAt())) {
                 //TODO handle replace == false
                 mostRecentMetricsPerBroker.replace(metricsUpdate.getBrokerId(), lastKnown, metricsUpdate);
+            } else if (lastKnown != null) {
+                log.warn("ignoring volumeMetrics as they are too old: {} currently using snapshot from {}", metricsUpdate.getSnapshotAt(), lastKnown.getSnapshotAt());
             }
         }
     }
