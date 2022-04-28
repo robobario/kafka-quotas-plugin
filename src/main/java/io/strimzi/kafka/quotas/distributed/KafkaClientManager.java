@@ -84,7 +84,14 @@ public class KafkaClientManager implements Closeable, Configurable {
         if (kafkaClientFactory == null) {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
-        return (Producer<String, T>) producersByType.computeIfAbsent(messageType, key -> kafkaClientFactory.newProducer(Map.of(ProducerConfig.BATCH_SIZE_CONFIG, 0, ProducerConfig.CLIENT_ID_CONFIG, messageType.getSimpleName()), key));
+        return (Producer<String, T>) producersByType.computeIfAbsent(messageType, key -> {
+            final Map<String, Object> customConfig = Map.of(ProducerConfig.BATCH_SIZE_CONFIG, 0,
+                    ProducerConfig.CLIENT_ID_CONFIG, messageType.getSimpleName(),
+                    ProducerConfig.ACKS_CONFIG, "1",
+                    ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, false
+            );
+            return kafkaClientFactory.newProducer(customConfig, key);
+        });
     }
 
     @SuppressWarnings("unchecked")
