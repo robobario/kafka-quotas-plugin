@@ -84,7 +84,7 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
             for (Volume volume : brokerSnapshot.getVolumes()) {
                 if (quotaFactorPolicy.breachesHardLimit(volume)) {
                     quotaRemaining = quotaFactorPolicy.quotaFactor(volume);
-                    log.warn("hard limit breach for {}:{} setting quotaFactor to 0.0", brokerId, volume.getVolumeName());
+                    log.warn("hard limit breach for broker-{}:{} setting quotaFactor to 0.0", brokerId, volume.getVolumeName());
                     break;
                 }
                 quotaRemaining = Math.min(quotaRemaining, quotaFactorPolicy.quotaFactor(volume));
