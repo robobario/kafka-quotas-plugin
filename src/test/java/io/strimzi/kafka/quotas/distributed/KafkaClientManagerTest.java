@@ -5,7 +5,6 @@
 
 package io.strimzi.kafka.quotas.distributed;
 
-import java.io.IOException;
 import java.util.Map;
 
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
@@ -22,6 +21,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import static io.strimzi.kafka.quotas.distributed.KafkaClientFactory.LISTENER_PORT_PROP;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -56,7 +56,7 @@ class KafkaClientManagerTest {
     }
 
     @AfterEach
-    void tearDown() throws IOException {
+    void tearDown() {
         if (kafkaClientManager != null) {
             kafkaClientManager.close();
         }
@@ -68,10 +68,9 @@ class KafkaClientManagerTest {
         kafkaClientManager = new KafkaClientManager(kafkaClientConfig -> kafkaClientFactory);
 
         //When
-        final Producer<String, VolumeUsageMetrics> producer = kafkaClientManager.producer(VolumeUsageMetrics.class);
+        assertThatThrownBy(() -> kafkaClientManager.producer(VolumeUsageMetrics.class)).isInstanceOf(IllegalStateException.class);
 
         //Then
-        assertThat(producer).isNull();
     }
 
     @Test
@@ -80,10 +79,9 @@ class KafkaClientManagerTest {
         kafkaClientManager = new KafkaClientManager(kafkaClientConfig -> kafkaClientFactory);
 
         //When
-        final Consumer<String, VolumeUsageMetrics> consumer = kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
+        assertThatThrownBy(() ->  kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class)).isInstanceOf(IllegalStateException.class);
 
         //Then
-        assertThat(consumer).isNull();
     }
 
     @Test
@@ -160,7 +158,7 @@ class KafkaClientManagerTest {
     }
 
     @Test
-    void shouldCloseProducer() throws IOException {
+    void shouldCloseProducer() {
         //Given
         kafkaClientManager.producer(VolumeUsageMetrics.class);
 
@@ -172,7 +170,7 @@ class KafkaClientManagerTest {
     }
 
     @Test
-    void shouldCloseConsumer() throws IOException {
+    void shouldCloseConsumer() {
         //Given
         kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
 
@@ -184,7 +182,7 @@ class KafkaClientManagerTest {
     }
 
     @Test
-    void shouldCloseAdminClient() throws IOException {
+    void shouldCloseAdminClient() {
         //Given
         kafkaClientManager.adminClient();
 

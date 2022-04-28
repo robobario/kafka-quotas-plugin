@@ -163,10 +163,14 @@ public class StaticQuotaConfig extends AbstractConfig {
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
             //TODO nasty doing this in the supplier should potentially be done async.
             //As callers of the supplier don't necessarily expect blocking operations.
-            kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class)
-                    .poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
-                    .records(volumeUsageMetricsTopic)
-                    .forEach(cr -> usageMetrics.add(cr.value()));
+            try {
+                kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class)
+                        .poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
+                        .records(volumeUsageMetricsTopic)
+                        .forEach(cr -> usageMetrics.add(cr.value()));
+            } catch (IllegalStateException e) {
+                log.warn("Unable to gather volumeUsageMetrics due to: {}", e.getMessage());
+            }
             return usageMetrics;
         };
     }
@@ -188,7 +192,6 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     /**
-     *
      * @return a function which accepts a volume metrics snapshot and sends it to the configured destination
      */
     public Consumer<VolumeUsageMetrics> volumeUsageMetricsPublisher() {
@@ -197,11 +200,16 @@ public class StaticQuotaConfig extends AbstractConfig {
         final String topic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
         //Note its important that the call to `producer` happens in the supplier instance so that it doesn't
         //get triggered on the thread calling configure and blocking broker start up.
-        return snapshot -> kafkaClientManager.producer(VolumeUsageMetrics.class).send(new ProducerRecord<>(topic, brokerId, snapshot));
+        return snapshot -> {
+            try {
+                kafkaClientManager.producer(VolumeUsageMetrics.class).send(new ProducerRecord<>(topic, brokerId, snapshot));
+            } catch (IllegalStateException e) {
+                log.warn("Unable to send message: {}", e.getMessage());
+            }
+        };
     }
 
     /**
-     *
      * @return A function which resolves the set of nodeId's which Kafka considers to be part of the cluster
      */
     public Supplier<Collection<String>> activeBrokerSupplier() {

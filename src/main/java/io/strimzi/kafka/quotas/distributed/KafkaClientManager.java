@@ -22,6 +22,7 @@ import org.slf4j.Logger;
 import static org.slf4j.LoggerFactory.getLogger;
 
 public class KafkaClientManager implements Closeable, Configurable {
+    private static final IllegalStateException NO_CLIENT_MANAGER_EXCEPTION = new IllegalStateException("no kafkaClientFactory available. Ensure it is provided before constructing clients");
     private final ConcurrentMap<Class<?>, Producer<String, ?>> producersByType;
 
     private final ConcurrentMap<Class<?>, Consumer<String, ?>> consumersByType;
@@ -73,11 +74,10 @@ public class KafkaClientManager implements Closeable, Configurable {
         kafkaClientFactory = this.kafkaClientFactorySupplier.apply(new KafkaClientConfig(configs, true));
     }
 
-    //TODO @Nullable ?
     @SuppressWarnings("unchecked")
     public <T> Producer<String, T> producer(Class<T> messageType) {
         if (kafkaClientFactory == null) {
-            return null;
+            throw NO_CLIENT_MANAGER_EXCEPTION;
         }
         return (Producer<String, T>) producersByType.computeIfAbsent(messageType, key -> kafkaClientFactory.newProducer(kafkaClientFactory.getBaseKafkaConfig(), key));
     }
@@ -85,7 +85,7 @@ public class KafkaClientManager implements Closeable, Configurable {
     @SuppressWarnings("unchecked")
     public <T> Consumer<String, T> consumerFor(String topic, Class<T> messageType) {
         if (kafkaClientFactory == null) {
-            return null;
+            throw NO_CLIENT_MANAGER_EXCEPTION;
         }
         //TODO connection status metrics
         final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> {
@@ -94,7 +94,6 @@ public class KafkaClientManager implements Closeable, Configurable {
             return kafkaClientFactory.newConsumer(consumerConfig, key);
         });
 
-        //TODO should we really subscribe here?
         kafkaConsumer.subscribe(List.of(topic));
         return kafkaConsumer;
     }
