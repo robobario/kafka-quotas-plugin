@@ -155,6 +155,23 @@ class StaticQuotaCallbackTest {
     }
 
     @Test
+    void shouldMarkSuperUserAsExcludedPrincipal() {
+        //Given
+        KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
+        KafkaPrincipal superUser = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "super.user");
+        target.configure(Map.of(
+                "super.users", "User:super.user",
+                StaticQuotaConfig.EXCLUDED_PRINCIPAL_NAME_LIST_PROP, "bar",
+                StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
+
+        //When
+        final Map<String, String> metricTags = target.quotaMetricTags(ClientQuotaType.PRODUCE, superUser, "clientId");
+
+        //Then
+        assertThat(metricTags).containsEntry("excluded-principal-quota-key", "true");
+    }
+
+    @Test
     void pluginLifecycle() throws Exception {
         StorageChecker storageChecker = mock(StorageChecker.class);
         StaticQuotaCallback target = new StaticQuotaCallback(storageChecker, Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);

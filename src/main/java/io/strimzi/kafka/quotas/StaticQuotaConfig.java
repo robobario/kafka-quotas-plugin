@@ -6,8 +6,10 @@ package io.strimzi.kafka.quotas;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,6 +30,8 @@ import org.apache.kafka.common.Node;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.metrics.Quota;
+import org.apache.kafka.common.security.auth.KafkaPrincipal;
+import org.apache.kafka.common.utils.SecurityUtils;
 import org.apache.kafka.server.quota.ClientQuotaType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -61,6 +65,7 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String KAFKA_READ_TIMEOUT_SECONDS_PROP = "client.quota.callback.kafka.readTimeout";
 
     static final String LOG_DIRS_PROP = "log.dirs";
+    public static final String SUPER_USERS_CONFIG_PROP = "super.users";
 
     private final Logger log = LoggerFactory.getLogger(StaticQuotaConfig.class);
     private KafkaClientManager kafkaClientManager;
@@ -142,7 +147,12 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     List<String> getExcludedPrincipalNameList() {
-        return getList(EXCLUDED_PRINCIPAL_NAME_LIST_PROP);
+        final Set<String> excludedPrincipals = new HashSet<>(getList(EXCLUDED_PRINCIPAL_NAME_LIST_PROP));
+        final Set<String> superPrincipals = getSuperUserPrincipals();
+        if (!excludedPrincipals.containsAll(superPrincipals)) {
+            excludedPrincipals.addAll(superPrincipals);
+        }
+        return List.copyOf(excludedPrincipals);
     }
 
     /**
@@ -241,6 +251,16 @@ public class StaticQuotaConfig extends AbstractConfig {
 
     public int getPartitionCount() {
         return getInt(TOPIC_PARTITION_COUNT_PROP);
+    }
+
+    private Set<String> getSuperUserPrincipals() {
+        //Can't use getList as SUPER_USERS_CONFIG_PROP is not something from the configDef, and it isn't a comma separated list
+        String superUsersConfig = (String) originals().getOrDefault(SUPER_USERS_CONFIG_PROP,  "");
+        return Arrays.stream(superUsersConfig.split(";"))
+                .filter(str -> !str.trim().isEmpty())
+                .map(SecurityUtils::parseKafkaPrincipal)
+                .map(KafkaPrincipal::getName)
+                .collect(Collectors.toUnmodifiableSet());
     }
 }
 

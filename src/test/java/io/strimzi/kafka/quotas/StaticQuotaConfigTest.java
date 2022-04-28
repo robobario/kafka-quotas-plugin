@@ -5,6 +5,7 @@
 
 package io.strimzi.kafka.quotas;
 
+import java.util.List;
 import java.util.Map;
 
 import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
@@ -16,12 +17,12 @@ import org.junitpioneer.jupiter.SetSystemProperty;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import static io.strimzi.kafka.quotas.StaticQuotaConfig.EXCLUDED_PRINCIPAL_NAME_LIST_PROP;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
 class StaticQuotaConfigTest {
 
-    public static final String TEST_TOPIC = "testTopic";
     @Mock(lenient = true)
     private KafkaClientManager kafkaClientManager;
 
@@ -90,6 +91,20 @@ class StaticQuotaConfigTest {
 
         //Then
         assertThat(actualBrokerId).isEqualTo("-1");
+    }
+
+    @Test
+    void shouldEnsureSuperUserIsIncludedInExcludedPrincipals() {
+        //Given
+        final StaticQuotaConfig staticQuotaConfig = newStaticQuotaConfig(Map.of(
+                "super.users", "User:super.user",
+                EXCLUDED_PRINCIPAL_NAME_LIST_PROP, "bob,fred"));
+
+        //When
+        final List<String> actualExcludedPrincipals = staticQuotaConfig.getExcludedPrincipalNameList();
+
+        //Then
+        assertThat(actualExcludedPrincipals).containsExactlyInAnyOrder("bob", "fred", "super.user");
     }
 
     private StaticQuotaConfig newStaticQuotaConfig(Map<String, String> config) {
