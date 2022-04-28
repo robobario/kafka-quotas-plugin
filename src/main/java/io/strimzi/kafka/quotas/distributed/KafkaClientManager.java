@@ -16,6 +16,7 @@ import org.apache.kafka.clients.admin.Admin;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.Configurable;
 import org.slf4j.Logger;
 
@@ -79,7 +80,7 @@ public class KafkaClientManager implements Closeable, Configurable {
         if (kafkaClientFactory == null) {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
-        return (Producer<String, T>) producersByType.computeIfAbsent(messageType, key -> kafkaClientFactory.newProducer(kafkaClientFactory.getBaseKafkaConfig(), key));
+        return (Producer<String, T>) producersByType.computeIfAbsent(messageType, key -> kafkaClientFactory.newProducer(Map.of(ProducerConfig.BATCH_SIZE_CONFIG, 0, ProducerConfig.CLIENT_ID_CONFIG, messageType.getSimpleName()), key));
     }
 
     @SuppressWarnings("unchecked")
@@ -88,11 +89,7 @@ public class KafkaClientManager implements Closeable, Configurable {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
         //TODO connection status metrics
-        final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> {
-            final Map<String, Object> consumerConfig = kafkaClientFactory.getBaseKafkaConfig();
-            consumerConfig.put(ConsumerConfig.GROUP_ID_CONFIG, messageType.getSimpleName());
-            return kafkaClientFactory.newConsumer(consumerConfig, key);
-        });
+        final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> kafkaClientFactory.newConsumer(Map.of(ConsumerConfig.GROUP_ID_CONFIG, messageType.getSimpleName()), key));
 
         kafkaConsumer.subscribe(List.of(topic));
         return kafkaConsumer;

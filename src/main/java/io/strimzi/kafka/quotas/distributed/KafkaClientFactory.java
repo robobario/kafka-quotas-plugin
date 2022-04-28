@@ -51,13 +51,17 @@ public class KafkaClientFactory {
                 .configure(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, false);
     }
 
-    public <V> Producer<String, V> newProducer(Map<String, Object> kafkaConfig, Class<V> ignored) {
+    public <V> Producer<String, V> newProducer(Map<String, Object> additionalConfig, Class<V> ignored) {
         //Include the value class in the method signature to make mocking easier...
-        return new KafkaProducer<>(kafkaConfig, keySerializer, new JacksonSerializer<>(objectMapper));
+        final Map<String, Object> config = getBaseKafkaConfig();
+        config.putAll(additionalConfig);
+        return new KafkaProducer<>(config, keySerializer, new JacksonSerializer<>(objectMapper));
     }
 
-    public <V> Consumer<String, V> newConsumer(Map<String, Object> kafkaConfig, Class<V> messageType) {
-        return new KafkaConsumer<>(kafkaConfig, keyDeserializer, new JacksonDeserializer<>(objectMapper, messageType));
+    public <V> Consumer<String, V> newConsumer(Map<String, Object> additionalConfig, Class<V> messageType) {
+        final Map<String, Object> config = getBaseKafkaConfig();
+        config.putAll(additionalConfig);
+        return new KafkaConsumer<>(config, keyDeserializer, new JacksonDeserializer<>(objectMapper, messageType));
     }
 
     public Admin newAdmin() {
