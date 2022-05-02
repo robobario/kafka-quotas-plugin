@@ -65,17 +65,18 @@ public class FileSystemDataSourceTask implements DataSourceTask {
         this.volumeUsageMetricsConsumer = volumeUsageMetricsConsumer;
 
         totalConsumedSpace = new AtomicLong(-1);
-        Metrics.newGauge(StaticQuotaCallback.metricName(StorageChecker.class, "TotalStorageUsedBytes"), new Gauge<Long>() {
+        //io.strimzi.kafka.quotas & StorageChecker are part of the public API so preserve the old names.
+        Metrics.newGauge(StaticQuotaCallback.metricName("io.strimzi.kafka.quotas", "TotalStorageUsedBytes", "StorageChecker"), new Gauge<Long>() {
             public Long value() {
                 return totalConsumedSpace.get();
             }
         });
-        Metrics.newGauge(StaticQuotaCallback.metricName(StorageChecker.class, "SoftLimitBytes"), new Gauge<Long>() {
+        Metrics.newGauge(StaticQuotaCallback.metricName("io.strimzi.kafka.quotas", "SoftLimitBytes", "StorageChecker"), new Gauge<Long>() {
             public Long value() {
                 return softLimit.getLevel();
             }
         });
-        Metrics.newGauge(StaticQuotaCallback.metricName(StorageChecker.class, "HardLimitBytes"), new Gauge<Long>() {
+        Metrics.newGauge(StaticQuotaCallback.metricName("io.strimzi.kafka.quotas", "HardLimitBytes", "StorageChecker"), new Gauge<Long>() {
             public Long value() {
                 return hardLimit.getLevel();
             }

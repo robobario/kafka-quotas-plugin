@@ -48,18 +48,12 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private static final String EXCLUDED_PRINCIPAL_QUOTA_KEY = "excluded-principal-quota-key";
     public static final String METRICS_SCOPE = "io.strimzi.kafka.quotas.StaticQuotaCallback";
 
-    private final AtomicLong storageUsed = new AtomicLong(0);
-    private volatile long storageQuotaSoft = Long.MAX_VALUE;
-    private volatile long storageQuotaHard = Long.MAX_VALUE;
     private volatile List<String> excludedPrincipalNameList = List.of();
     private final AtomicBoolean resetQuota = new AtomicBoolean(true);
-    private final StorageChecker storageChecker;
     private final ScheduledExecutorService executorService;
     private final BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory;
     private final KafkaClientManager kafkaClientManager;
     private final static long LOGGING_DELAY_MS = 1000;
-    private AtomicLong lastLoggedMessageSoftTimeMs = new AtomicLong(0);
-    private AtomicLong lastLoggedMessageHardTimeMs = new AtomicLong(0);
 
     //Default to no restrictions until things have been configured.
     private volatile QuotaSupplier quotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
@@ -68,7 +62,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private ScheduledFuture<?> quotaPolicyFuture;
 
     public StaticQuotaCallback() {
-        this(new StorageChecker(),
+        this(
                 Executors.newSingleThreadScheduledExecutor(r -> {
                     final Thread thread = new Thread(r, StaticQuotaCallback.class.getSimpleName() + "-taskExecutor");
                     thread.setDaemon(true);
@@ -79,8 +73,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         );
     }
 
-    StaticQuotaCallback(StorageChecker storageChecker, ScheduledExecutorService executorService, BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory, KafkaClientManager kafkaClientManager) {
-        this.storageChecker = storageChecker;
+    StaticQuotaCallback(ScheduledExecutorService executorService, BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory, KafkaClientManager kafkaClientManager) {
         this.executorService = executorService;
         this.pluginConfigFactory = pluginConfigFactory;
         this.kafkaClientManager = kafkaClientManager;
@@ -89,6 +82,16 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     public static MetricName metricName(Class<?> clazz, String name) {
         String group = clazz.getPackageName();
         String type = clazz.getSimpleName();
+        return metricName(group, name, type);
+    }
+
+    public static MetricName metricName(String group, String name, String type) {
+//        private MetricName metricName(Class<?> clazz, String name) {
+//            String group = clazz.getPackageName();
+//            String type = clazz.getSimpleName();
+//            String mBeanName = String.format("%s:type=%s,name=%s", group, type, name);
+//            return new MetricName(group, type, name, this.scope, mBeanName);
+//        }
         String mBeanName = String.format("%s:type=%s,name=%s", group, type, name);
         return new MetricName(group, type, name, METRICS_SCOPE, mBeanName);
     }
@@ -155,7 +158,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
 
     @Override
     public boolean updateClusterMetadata(Cluster cluster) {
-        storageChecker.startIfNecessary();
         return false;
     }
 
@@ -164,7 +166,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         try {
             closeExecutorService();
             closeKafkaClients();
-            closeStorageChecker();
         } finally {
             Metrics.defaultRegistry().allMetrics().keySet().stream()
                     .filter(m -> METRICS_SCOPE.equals(m.getScope()))
@@ -188,15 +189,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
     }
 
-    private void closeStorageChecker() {
-        try {
-            storageChecker.stop();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new RuntimeException(e);
-        }
-    }
-
     @SuppressWarnings("unchecked")
     @Override
     public void configure(Map<String, ?> configs) {
@@ -204,17 +196,11 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         StaticQuotaConfig config = pluginConfigFactory.apply(configs, true).withKafkaClientManager(kafkaClientManager);
         quotaSupplier = config.quotaSupplier();
         quotaFactorSupplier = config.quotaFactorSupplier();
-        storageQuotaSoft = config.getSoftStorageQuota();
-        storageQuotaHard = config.getHardStorageQuota();
         excludedPrincipalNameList = config.getExcludedPrincipalNameList();
 
         quotaFactorSupplier.addUpdateListener(() -> resetQuota.set(true));
 
-        long storageCheckIntervalMillis = TimeUnit.SECONDS.toMillis(config.getStorageCheckInterval());
         List<Path> logDirs = config.getLogDirs().stream().map(Paths::get).collect(Collectors.toList());
-        storageChecker.configure(storageCheckIntervalMillis,
-                logDirs,
-                this::updateUsedStorage);
 
         if (dataSourceFuture != null) {
             dataSourceFuture.cancel(false);
@@ -272,12 +258,5 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
                 });
         //TODO should we return this or just wait here?
         return createTopicFuture;
-    }
-
-    private void updateUsedStorage(Long newValue) {
-        var oldValue = storageUsed.getAndSet(newValue);
-        if (oldValue != newValue) {
-            resetQuota.set(true);
-        }
     }
 }
