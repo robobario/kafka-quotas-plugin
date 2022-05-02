@@ -10,18 +10,28 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 import io.strimzi.kafka.quotas.TestUtils;
 import io.strimzi.kafka.quotas.policy.ConsumedBytesLimitPolicy;
 import io.strimzi.kafka.quotas.policy.QuotaFactorPolicy;
 import io.strimzi.kafka.quotas.types.Limit;
+import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 import io.strimzi.kafka.quotas.types.Volume;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Mockito;
+import org.mockito.internal.verification.Times;
+import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
+@ExtendWith(MockitoExtension.class)
 class ActiveBrokerQuotaFactorPolicyTaskTest {
 
     private static final long SOFT_LIMIT = 5L;
@@ -167,7 +177,7 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     }
 
     @Test
-    void shouldMpaUsageMetricsToQuotaPolicy() {
+    void shouldMapUsageMetricsToQuotaPolicy() {
         //Given
 
         //When
@@ -179,6 +189,50 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
         assertThat(actualQuotaFactorPolicy).extracting("hardLimitPolicy").isInstanceOf(ConsumedBytesLimitPolicy.class);
         assertThat(actualQuotaFactorPolicy.getSoftLimit()).isEqualTo(SOFT_LIMIT);
         assertThat(actualQuotaFactorPolicy.getHardLimit()).isEqualTo(HARD_LIMIT);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void shouldOnlyNotifyEachListenerOnce() {
+        //Given
+        final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
+
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics), () -> List.of("1"), 0.6, Duration.ofHours(1));
+        final Consumer<UpdateQuotaFactor> updateQuotaFactorConsumer = mock(Consumer.class);
+        quotaPolicyTask.addListener(updateQuotaFactorConsumer);
+        quotaPolicyTask.addListener(updateQuotaFactorConsumer);
+
+        //When
+        quotaPolicyTask.run();
+
+        //Then
+        verify(updateQuotaFactorConsumer, new Times(1)).accept(any());
+    }
+
+    @Test
+    void shouldNotifyListenerOnLateJoin() {
+        //Given
+        final double expectedFactor = 0.4;
+        quotaPolicyTask.run();
+
+        //When
+        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
+
+        //Then
+        assertThat(updates).hasSameElementsAs(List.of(expectedFactor));
+
+    }
+    @SuppressWarnings("unchecked")
+    @Test
+    void shouldNotNotifyListenerOnLateJoinIfRunNotInvoked() {
+        //Given
+        final Consumer<UpdateQuotaFactor> quotaFactorConsumer = mock(Consumer.class);
+
+        //When
+        quotaPolicyTask.addListener(quotaFactorConsumer);
+
+        //Then
+        Mockito.verifyNoInteractions(quotaFactorConsumer);
     }
 
     private VolumeUsageMetrics generateUsageMetrics(String brokerId, Instant snapshotAt, Volume... volumes) {

@@ -7,12 +7,13 @@ package io.strimzi.kafka.quotas.local;
 
 import java.time.Duration;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.Collection;
-import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -40,8 +41,8 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
     private final Supplier<Collection<String>> activeBrokerIdsSupplier;
     private final double missingDataQuotaFactor;
     private final Duration metricsStaleAfter;
-    private final List<Consumer<UpdateQuotaFactor>> updateListeners = new ArrayList<>();
-
+    private final Set<Consumer<UpdateQuotaFactor>> updateListeners;
+    private final AtomicReference<UpdateQuotaFactor> latestUpdate;
     private final ConcurrentMap<String, VolumeUsageMetrics> mostRecentMetricsPerBroker;
 
     private final Logger log = getLogger(ActiveBrokerQuotaFactorPolicyTask.class);
@@ -54,6 +55,8 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
         this.metricsStaleAfter = metricsStaleAfter;
         this.mostRecentMetricsPerBroker = new ConcurrentHashMap<>();
         log.info("Checking active broker usage: every {} {}", periodInSeconds, getPeriodUnit());
+        updateListeners = new CopyOnWriteArraySet<>();
+        latestUpdate = new AtomicReference<>();
     }
 
     @Override
@@ -69,6 +72,10 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
     @Override
     public void addListener(Consumer<UpdateQuotaFactor> quotaFactorConsumer) {
         updateListeners.add(quotaFactorConsumer);
+        final UpdateQuotaFactor latestUpdated = latestUpdate.get();
+        if (latestUpdated != null) {
+            quotaFactorConsumer.accept(latestUpdated);
+        }
     }
 
     @Override
@@ -105,6 +112,7 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
         double updatedQuotaFactor = quotaRemaining;
         log.info("Broker volume usage check complete applying quota factor: {}", updatedQuotaFactor);
         final UpdateQuotaFactor updateMessage = new UpdateQuotaFactor(Instant.now(), updatedQuotaFactor);
+        latestUpdate.set(updateMessage);
         for (Consumer<UpdateQuotaFactor> updateListener : updateListeners) {
             updateListener.accept(updateMessage);
         }

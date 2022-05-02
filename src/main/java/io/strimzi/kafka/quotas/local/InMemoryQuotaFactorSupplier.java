@@ -5,8 +5,8 @@
 
 package io.strimzi.kafka.quotas.local;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Set;
+import java.util.concurrent.CopyOnWriteArraySet;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 
@@ -15,7 +15,7 @@ import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
 
 public class InMemoryQuotaFactorSupplier implements QuotaFactorSupplier, Consumer<UpdateQuotaFactor> {
     private final AtomicLong currentFactor = new AtomicLong();
-    private final List<Runnable> listeners = new ArrayList<>();
+    private final Set<Runnable> listeners = new CopyOnWriteArraySet<>();
     private static final double EPSILON = 0.00001;
 
     @Override
@@ -36,6 +36,7 @@ public class InMemoryQuotaFactorSupplier implements QuotaFactorSupplier, Consume
     @Override
     public void addUpdateListener(Runnable listener) {
         listeners.add(listener);
+        listener.run();
     }
 
     private boolean hasChanged(double newFactor, double oldFactor) {
