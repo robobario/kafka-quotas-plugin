@@ -29,6 +29,7 @@ import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
+import org.apache.kafka.common.config.ConfigException;
 import org.apache.kafka.common.metrics.Quota;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.common.utils.SecurityUtils;
@@ -64,6 +65,7 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String TOPIC_PARTITION_COUNT_PROP = "client.quota.callback.kafka.partitionCount";
     static final String KAFKA_READ_TIMEOUT_SECONDS_PROP = "client.quota.callback.kafka.readTimeout";
     static final String MISSING_DATA_QUOTA_FACTOR_PROP = "client.quota.callback.missingDataDFactor";
+    static final String STALE_METRICS_DATA_PROP = "client.quota.callback.usageMetrics.staleDuration";
 
     static final String LOG_DIRS_PROP = "log.dirs";
     private static final String SUPER_USERS_CONFIG_PROP = "super.users";
@@ -91,6 +93,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(VOLUME_USAGE_METRICS_TOPIC_PROP, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
                         .define(TOPIC_PARTITION_COUNT_PROP, INT, "1", LOW, "The number of partitions to use for the topics used by the plugin")
                         .define(KAFKA_READ_TIMEOUT_SECONDS_PROP, INT, "10", LOW, "How long should the plugin wait for kafka interactions")
+                        .define(STALE_METRICS_DATA_PROP, STRING, "PT10m", ConfigDef.LambdaValidator.with(StaticQuotaConfig::validateDuration, () -> "DurationValidator"), LOW, "After what java.time.Duration should broker metrics be considered stale and ignored.")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
                 props,
                 doLog);
@@ -260,14 +263,32 @@ public class StaticQuotaConfig extends AbstractConfig {
         return getInt(TOPIC_PARTITION_COUNT_PROP);
     }
 
+    public Duration getMetricsStaleAfterDuration() {
+        //We don't need to handle parse errors here as value is validated to be parseable by the config system
+        return Duration.parse(getString(STALE_METRICS_DATA_PROP));
+    }
+
     private Set<String> getSuperUserPrincipals() {
         //Can't use getList as SUPER_USERS_CONFIG_PROP is not something from the configDef, and it isn't a comma separated list
-        String superUsersConfig = (String) originals().getOrDefault(SUPER_USERS_CONFIG_PROP,  "");
+        String superUsersConfig = (String) originals().getOrDefault(SUPER_USERS_CONFIG_PROP, "");
         return Arrays.stream(superUsersConfig.split(";"))
                 .filter(str -> !str.trim().isEmpty())
                 .map(SecurityUtils::parseKafkaPrincipal)
                 .map(KafkaPrincipal::getName)
                 .collect(Collectors.toUnmodifiableSet());
     }
+
+    private static void validateDuration(String name, Object value) {
+        if (value != null && CharSequence.class.isAssignableFrom(value.getClass())) {
+            try {
+                Duration.parse((CharSequence) value);
+                return;
+            } catch (Exception e) {
+                throw new ConfigException(name, value, e.getMessage());
+            }
+        }
+        throw new ConfigException(name, value, "Invalid duration provided");
+    }
+
 }
 

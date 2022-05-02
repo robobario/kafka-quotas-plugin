@@ -229,7 +229,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
         //TODO add separate poll interval for quota policy
         if (config.getQuotaPolicyInterval() > 0) {
-            final QuotaFactorPolicyTask quotaFactorPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier(), config.getMissingDataQuotaFactor());
+            final QuotaFactorPolicyTask quotaFactorPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier(), config.getMissingDataQuotaFactor(), config.getMetricsStaleAfterDuration());
             if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
                 quotaFactorPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }

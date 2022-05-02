@@ -5,6 +5,7 @@
 
 package io.strimzi.kafka.quotas.local;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -38,17 +39,19 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
     private final Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier;
     private final Supplier<Collection<String>> activeBrokerIdsSupplier;
     private final double missingDataQuotaFactor;
+    private final Duration metricsStaleAfter;
     private final List<Consumer<UpdateQuotaFactor>> updateListeners = new ArrayList<>();
 
     private final ConcurrentMap<String, VolumeUsageMetrics> mostRecentMetricsPerBroker;
 
     private final Logger log = getLogger(ActiveBrokerQuotaFactorPolicyTask.class);
 
-    public ActiveBrokerQuotaFactorPolicyTask(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier, Supplier<Collection<String>> activeBrokerIdsSupplier, double missingDataQuotaFactor) {
+    public ActiveBrokerQuotaFactorPolicyTask(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier, Supplier<Collection<String>> activeBrokerIdsSupplier, double missingDataQuotaFactor, Duration metricsStaleAfter) {
         this.periodInSeconds = periodInSeconds;
         this.volumeUsageMetricsSupplier = volumeUsageMetricsSupplier;
         this.activeBrokerIdsSupplier = activeBrokerIdsSupplier;
         this.missingDataQuotaFactor = missingDataQuotaFactor;
+        this.metricsStaleAfter = metricsStaleAfter;
         this.mostRecentMetricsPerBroker = new ConcurrentHashMap<>();
         log.info("Checking active broker usage: every {} {}", periodInSeconds, getPeriodUnit());
     }
@@ -74,6 +77,7 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
         double quotaRemaining = 1.0;
         final Collection<String> activeBrokers = activeBrokerIdsSupplier.get();
         log.info("checking volume usage for brokerIds: {}", activeBrokers);
+        final Instant metricsValidAfter = Instant.now().minus(metricsStaleAfter);
         for (String brokerId : activeBrokers) {
             final VolumeUsageMetrics brokerSnapshot = mostRecentMetricsPerBroker.get(brokerId);
             if (brokerSnapshot == null) {
@@ -82,8 +86,13 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
                 quotaRemaining = missingDataQuotaFactor;
                 break;
             }
+            if (brokerSnapshot.getSnapshotAt().isBefore(metricsValidAfter)) {
+                log.warn("Stale metrics found for {} setting quotaFactor to {}", brokerId, missingDataQuotaFactor);
+                log.debug("Stale metrics found metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
+                quotaRemaining = missingDataQuotaFactor;
+                break;
+            }
             final QuotaFactorPolicy quotaFactorPolicy = mapLimitsToQuotaPolicy(brokerSnapshot);
-            //TODO freshness check for snapshots
             for (Volume volume : brokerSnapshot.getVolumes()) {
                 if (quotaFactorPolicy.breachesHardLimit(volume)) {
                     quotaRemaining = quotaFactorPolicy.quotaFactor(volume);
