@@ -9,9 +9,6 @@ import java.nio.file.Paths;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -28,10 +25,7 @@ import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.ActiveBrokerQuotaFactorPolicyTask;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
-import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.Cluster;
-import org.apache.kafka.common.config.TopicConfig;
-import org.apache.kafka.common.errors.TopicExistsException;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.quota.ClientQuotaCallback;
 import org.apache.kafka.server.quota.ClientQuotaEntity;
@@ -60,6 +54,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private volatile QuotaFactorSupplier quotaFactorSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
     private ScheduledFuture<?> dataSourceFuture;
     private ScheduledFuture<?> quotaPolicyFuture;
+    private ScheduledFuture<?> ensureTopicAvailableFuture;
 
     public StaticQuotaCallback() {
         this(
@@ -202,34 +197,21 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
 
         List<Path> logDirs = config.getLogDirs().stream().map(Paths::get).collect(Collectors.toList());
 
-        if (dataSourceFuture != null) {
-            dataSourceFuture.cancel(false);
-        }
         if (config.getStorageCheckInterval() > 0) {
+            ensureExistingTaskCancelled(ensureTopicAvailableFuture, dataSourceFuture);
+            String topic = config.getVolumeUsageMetricsTopic();
+            ensureTopicAvailableFuture = executorService.scheduleWithFixedDelay(new EnsureTopicAvailableRunnable(kafkaClientManager, topic, config.getPartitionCount()), 0, config.getStorageCheckInterval(), TimeUnit.SECONDS);
+
             final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, config.getSoftLimit(), config.getHardLimit(), config.getStorageCheckInterval(), config.getBrokerId(), config.volumeUsageMetricsPublisher());
             dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());
         }
 
-        if (quotaPolicyFuture != null) {
-            quotaPolicyFuture.cancel(false);
-        }
-        //TODO add separate poll interval for quota policy
         if (config.getQuotaPolicyInterval() > 0) {
+            ensureExistingTaskCancelled(quotaPolicyFuture);
             final QuotaFactorPolicyTask quotaFactorPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier(), config.getMissingDataQuotaFactor(), config.getMetricsStaleAfterDuration());
             if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
                 quotaFactorPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }
-            String topic = config.getVolumeUsageMetricsTopic();
-            executorService.schedule(() -> {
-                try {
-                    ensureTopicIsAvailable(topic, config).get();
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage());
-                } catch (ExecutionException e) {
-                    log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage());
-                }
-            }, 0, TimeUnit.SECONDS);
             quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaFactorPolicyTask, 0, quotaFactorPolicyTask.getPeriod(), quotaFactorPolicyTask.getPeriodUnit());
         }
         if (!excludedPrincipalNameList.isEmpty()) {
@@ -237,26 +219,11 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
     }
 
-    /*test*/ CompletableFuture<Void> ensureTopicIsAvailable(String topic, StaticQuotaConfig config) {
-        final CompletableFuture<Void> createTopicFuture = new CompletableFuture<>();
-        log.info("ensuring {} exists", topic);
-        final int topicPartitionCount = config.getPartitionCount();
-        final NewTopic newTopic = new NewTopic(topic, Optional.of(topicPartitionCount), Optional.empty());
-        newTopic.configs(Map.of(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT));
-        final List<NewTopic> topics = List.of(newTopic);
-        kafkaClientManager.adminClient()
-                .createTopics(topics)
-                .all()
-                .whenComplete((unused, throwable) -> {
-                    if (throwable != null && !(throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException)) {
-                        log.warn("Error creating topic: {}: {}", topic, throwable.getMessage(), throwable);
-                        createTopicFuture.completeExceptionally(throwable);
-                        return;
-                    }
-                    log.info("Created topic: {}", topic);
-                    createTopicFuture.complete(null);
-                });
-        //TODO should we return this or just wait here?
-        return createTopicFuture;
+    private void ensureExistingTaskCancelled(ScheduledFuture<?>... scheduledFutures) {
+        for (ScheduledFuture<?> scheduledFuture : scheduledFutures) {
+            if (scheduledFuture != null) {
+                scheduledFuture.cancel(false);
+            }
+        }
     }
 }

@@ -4,12 +4,8 @@
  */
 package io.strimzi.kafka.quotas;
 
-import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -21,10 +17,6 @@ import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.UnlimitedQuotaSupplier;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 import org.apache.kafka.clients.admin.Admin;
-import org.apache.kafka.clients.admin.CreateTopicsResult;
-import org.apache.kafka.clients.admin.NewTopic;
-import org.apache.kafka.common.errors.TopicExistsException;
-import org.apache.kafka.common.internals.KafkaFutureImpl;
 import org.apache.kafka.common.security.auth.KafkaPrincipal;
 import org.apache.kafka.server.quota.ClientQuotaType;
 import org.junit.jupiter.api.AfterEach;
@@ -32,7 +24,6 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -44,7 +35,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyCollection;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isA;
@@ -68,9 +58,6 @@ class StaticQuotaCallbackTest {
 
     @Mock(lenient = true)
     private KafkaClientManager kafkaClientManager;
-
-    @Captor
-    private ArgumentCaptor<Collection<NewTopic>> newTopicsCaptor;
 
     @BeforeEach
     void setup() {
@@ -224,6 +211,51 @@ class StaticQuotaCallbackTest {
         final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(executorService, this::spyOnQuotaConfig, kafkaClientManager);
         final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
         doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(DataSourceTask.class), anyLong(), anyLong(), any());
+        doReturn(null).when(executorService).scheduleWithFixedDelay(isA(EnsureTopicAvailableRunnable.class), anyLong(), anyLong(), any());
+        final int interval = 10;
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
+
+        //When
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
+
+        //Then
+        verify(scheduledFuture).cancel(false);
+    }
+    @Test
+    void shouldNotScheduleEnsureTopicAvailableRunnable() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(executorService, this::spyOnQuotaConfig, kafkaClientManager);
+
+        //When
+        staticQuotaCallback.configure(Map.of());
+
+        //Then
+        verifyNoInteractions(executorService);
+    }
+
+    @Test
+    void shouldScheduleEnsureTopicAvailableRunnable() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(executorService, this::spyOnQuotaConfig, kafkaClientManager);
+        final Long interval = 10L;
+
+        //When
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval.intValue()));
+
+        //Then
+        verify(executorService).scheduleWithFixedDelay(isA(EnsureTopicAvailableRunnable.class), anyLong(), eq(interval), eq(TimeUnit.SECONDS));
+    }
+
+    @Test
+    void shouldCancelExistingScheduleEnsureTopicAvailableRunnable() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(executorService, this::spyOnQuotaConfig, kafkaClientManager);
+        final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        doReturn(null).when(executorService).scheduleWithFixedDelay(isA(DataSourceTask.class), anyLong(), anyLong(), any());
+        doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(EnsureTopicAvailableRunnable.class), anyLong(), anyLong(), any());
         final int interval = 10;
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
 
@@ -318,55 +350,6 @@ class StaticQuotaCallbackTest {
 
         //Then
         verify(kafkaClientManager).configure(eq(configMap));
-    }
-
-    @Test
-    void shouldRequestNewTopic() {
-        //Given
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
-        final NewTopic expectedNewTopic = new NewTopic(TEST_TOPIC, Optional.of(1), Optional.empty());
-        expectedNewTopic.configs(Map.of("cleanup.policy", "compact"));
-        stubCreationOfMissingTopic();
-
-        //When
-        final CompletableFuture<Void> topicFuture = staticQuotaCallback.ensureTopicIsAvailable(TEST_TOPIC, spyOnQuotaConfig(Map.of(), false));
-
-        //Then
-        verify(adminClient).createTopics(newTopicsCaptor.capture());
-        assertThat(newTopicsCaptor.getValue()).containsExactly(expectedNewTopic);
-        assertThat(topicFuture).isCompleted();
-    }
-
-    @Test
-    void shouldContinueIfTopicExistsAlready() {
-        //Given
-        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(Executors.newSingleThreadScheduledExecutor(), this::spyOnQuotaConfig, kafkaClientManager);
-        stubCreationOfExistingTopic();
-
-        //When
-        final CompletableFuture<Void> topicFuture = staticQuotaCallback.ensureTopicIsAvailable(TEST_TOPIC, spyOnQuotaConfig(Map.of(), false));
-
-        //Then
-        verify(adminClient).createTopics(anyCollection());
-        assertThat(topicFuture).isCompleted();
-    }
-
-    private void stubCreationOfExistingTopic() {
-        final KafkaFutureImpl<Void> createTopicFuture = new KafkaFutureImpl<>();
-        createTopicFuture.completeExceptionally(new ExecutionException(new TopicExistsException("haha beat you to it...")));
-        final CreateTopicsResult createTopicsResult = mock(CreateTopicsResult.class);
-
-        when(adminClient.createTopics(anyCollection())).thenReturn(createTopicsResult);
-        when(createTopicsResult.all()).thenReturn(createTopicFuture);
-    }
-
-    private void stubCreationOfMissingTopic() {
-        final KafkaFutureImpl<Void> createTopicFuture = new KafkaFutureImpl<>();
-        createTopicFuture.complete(null);
-        final CreateTopicsResult createTopicsResult = mock(CreateTopicsResult.class);
-
-        when(adminClient.createTopics(anyCollection())).thenReturn(createTopicsResult);
-        when(createTopicsResult.all()).thenReturn(createTopicFuture);
     }
 
     private StaticQuotaConfig spyOnQuotaConfig(Map<String, ?> config, Boolean doLog) {
