@@ -81,12 +81,6 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     }
 
     public static MetricName metricName(String group, String name, String type) {
-//        private MetricName metricName(Class<?> clazz, String name) {
-//            String group = clazz.getPackageName();
-//            String type = clazz.getSimpleName();
-//            String mBeanName = String.format("%s:type=%s,name=%s", group, type, name);
-//            return new MetricName(group, type, name, this.scope, mBeanName);
-//        }
         String mBeanName = String.format("%s:type=%s,name=%s", group, type, name);
         return new MetricName(group, type, name, METRICS_SCOPE, mBeanName);
     }
