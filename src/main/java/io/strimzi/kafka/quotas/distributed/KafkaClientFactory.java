@@ -41,6 +41,7 @@ public class KafkaClientFactory {
     static final String LISTENER_NAME_PROP = "client.quota.callback.kafka.listener.name";
     static final String LISTENER_PORT_PROP = "client.quota.callback.kafka.listener.port";
     static final String LISTENER_PROTOCOL_PROP = "client.quota.callback.kafka.listener.protocol";
+    public static final String CLIENT_ID_PREFIX_PROP = "client.quota.callback.kafka.clientIdPrefix";
 
     public KafkaClientFactory(KafkaClientConfig kafkaClientConfig) {
         this.kafkaClientConfig = kafkaClientConfig;
@@ -64,8 +65,10 @@ public class KafkaClientFactory {
         return new KafkaConsumer<>(config, keyDeserializer, new JacksonDeserializer<>(objectMapper, messageType));
     }
 
-    public Admin newAdmin() {
-        return Admin.create(getBaseKafkaConfig());
+    public Admin newAdmin(Map<String, Object> additionalConfig) {
+        final Map<String, Object> config = getBaseKafkaConfig();
+        config.putAll(additionalConfig);
+        return Admin.create(config);
     }
 
     public Map<String, Object> getBaseKafkaConfig() {

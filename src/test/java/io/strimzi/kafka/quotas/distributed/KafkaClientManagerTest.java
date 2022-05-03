@@ -51,7 +51,7 @@ class KafkaClientManagerTest {
     void setUp() {
         doReturn(producer).when(kafkaClientFactory).newProducer(anyMap(), eq(VolumeUsageMetrics.class));
         doReturn(consumer).when(kafkaClientFactory).newConsumer(anyMap(), eq(VolumeUsageMetrics.class));
-        doReturn(adminClient).when(kafkaClientFactory).newAdmin();
+        doReturn(adminClient).when(kafkaClientFactory).newAdmin(anyMap());
 
         kafkaClientManager = new KafkaClientManager(kafkaClientConfig -> kafkaClientFactory);
         kafkaClientManager.configure(Map.of(LISTENER_PORT_PROP, 9091));

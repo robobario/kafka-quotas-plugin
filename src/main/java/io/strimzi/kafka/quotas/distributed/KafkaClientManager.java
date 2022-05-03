@@ -16,6 +16,7 @@ import java.util.function.Function;
 
 import io.strimzi.kafka.quotas.StaticQuotaConfig;
 import org.apache.kafka.clients.admin.Admin;
+import org.apache.kafka.clients.admin.AdminClientConfig;
 import org.apache.kafka.clients.consumer.Consumer;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
@@ -23,6 +24,7 @@ import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.Configurable;
 import org.slf4j.Logger;
 
+import static io.strimzi.kafka.quotas.distributed.KafkaClientFactory.CLIENT_ID_PREFIX_PROP;
 import static org.slf4j.LoggerFactory.getLogger;
 
 public class KafkaClientManager implements Closeable, Configurable {
@@ -40,6 +42,7 @@ public class KafkaClientManager implements Closeable, Configurable {
     private final Logger log = getLogger(KafkaClientManager.class);
     private KafkaClientFactory kafkaClientFactory;
     private String brokerId;
+    private volatile KafkaClientConfig kafkaClientConfig;
 
     public KafkaClientManager() {
         this(KafkaClientFactory::new);
@@ -77,22 +80,23 @@ public class KafkaClientManager implements Closeable, Configurable {
 
     @Override
     public void configure(Map<String, ?> configs) {
-        final KafkaClientConfig kafkaClientConfig = new KafkaClientConfig(configs, true);
+        kafkaClientConfig = new KafkaClientConfig(configs, true);
         kafkaClientFactory = this.kafkaClientFactorySupplier.apply(kafkaClientConfig);
         brokerId = StaticQuotaConfig.getBrokerIdFrom(kafkaClientConfig.originals());
     }
 
     @SuppressWarnings("unchecked")
     public <T> Producer<String, T> producer(Class<T> messageType) {
-        if (kafkaClientFactory == null) {
+        if (kafkaClientFactory == null || kafkaClientConfig == null) {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
         return (Producer<String, T>) producersByType.computeIfAbsent(messageType, key -> {
             //Disable batching as we have small and comparatively rarely published messages.
             //Reduced acks to 1 as we want to keep publishing regardless of cluster health (as this is one metric of cluster health)
             //Acks=1 implicitly disables idempotence but make it explicit here, so we know its deliberate and acknowledged.
-            final Map<String, Object> customConfig = Map.of(ProducerConfig.BATCH_SIZE_CONFIG, 0,
-                    ProducerConfig.CLIENT_ID_CONFIG, messageType.getSimpleName(),
+            final Map<String, Object> customConfig = Map.of(
+                    ProducerConfig.BATCH_SIZE_CONFIG, 0,
+                    ProducerConfig.CLIENT_ID_CONFIG, buildClientId("producer", messageType),
                     ProducerConfig.ACKS_CONFIG, "1",
                     ProducerConfig.ENABLE_IDEMPOTENCE_CONFIG, false
             );
@@ -102,12 +106,13 @@ public class KafkaClientManager implements Closeable, Configurable {
 
     @SuppressWarnings("unchecked")
     public <T> Consumer<String, T> consumerFor(String topic, Class<T> messageType) {
-        if (kafkaClientFactory == null) {
+        if (kafkaClientFactory == null || kafkaClientConfig == null) {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
         //TODO connection status metrics
         final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> {
             final Map<String, Object> customConfig = Map.of(
+                    ConsumerConfig.CLIENT_ID_CONFIG, buildClientId("consumer", messageType),
                     ConsumerConfig.GROUP_ID_CONFIG, messageType.getSimpleName() + "-" + brokerId,
                     ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
             return kafkaClientFactory.newConsumer(customConfig, key);
@@ -119,6 +124,16 @@ public class KafkaClientManager implements Closeable, Configurable {
 
     public Admin adminClient() {
         //TODO connection status metrics
-        return adminClientHolder.computeIfAbsent(Admin.class, key -> kafkaClientFactory.newAdmin());
+        return adminClientHolder.computeIfAbsent(Admin.class, key -> kafkaClientFactory.newAdmin(Map.of(AdminClientConfig.CLIENT_ID_CONFIG, buildAdminClientId())));
+    }
+
+    private <T> String buildClientId(String clientType, Class<T> messageType) {
+        final String idPrefix = kafkaClientConfig.getString(CLIENT_ID_PREFIX_PROP);
+        return String.format("%s-%s-%s-%s", idPrefix, clientType, messageType.getSimpleName(), brokerId);
+    }
+
+    private <T> String buildAdminClientId() {
+        final String idPrefix = kafkaClientConfig.getString(CLIENT_ID_PREFIX_PROP);
+        return String.format("%s-adminClient-%s", idPrefix, brokerId);
     }
 }
