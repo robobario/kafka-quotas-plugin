@@ -203,7 +203,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         if (config.getQuotaPolicyInterval() > 0) {
             ensureExistingTaskCancelled(quotaPolicyFuture);
             final QuotaFactorPolicyTask quotaFactorPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(config.getQuotaPolicyInterval(), config.volumeUsageMetricsSupplier(), config.activeBrokerSupplier(), config.getMissingDataQuotaFactor(), config.getMetricsStaleAfterDuration());
-            if (quotaFactorSupplier.getClass().isAssignableFrom(Consumer.class)) {
+            if (quotaFactorSupplier instanceof Consumer) {
                 quotaFactorPolicyTask.addListener((Consumer<UpdateQuotaFactor>) quotaFactorSupplier);
             }
             quotaPolicyFuture = executorService.scheduleWithFixedDelay(quotaFactorPolicyTask, 0, quotaFactorPolicyTask.getPeriod(), quotaFactorPolicyTask.getPeriodUnit());
