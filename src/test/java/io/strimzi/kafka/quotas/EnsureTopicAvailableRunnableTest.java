@@ -37,7 +37,7 @@ class EnsureTopicAvailableRunnableTest {
 
     @Mock
     KafkaClientManager kafkaClientManager;
-    @Mock(lenient = true)
+    @Mock
     private Admin adminClient;
 
     @Captor

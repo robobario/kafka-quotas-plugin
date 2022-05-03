@@ -77,8 +77,8 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     void shouldNotifyOfHardLimitBreachAcrossMultipleBrokers() {
         //Given
         final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
-        final VolumeUsageMetrics brokerBMetrics = generateUsageMetrics("2", Instant.now(), TestUtils.newVolumeWith(5L), TestUtils.newVolumeWith(HARD_LIMIT));
-        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics, brokerBMetrics), () -> List.of("1", "2"), MISSING_DATA_QUOTA_FACTOR, Duration.ofHours(1));
+        final VolumeUsageMetrics broker2Metrics = generateUsageMetrics("2", Instant.now(), TestUtils.newVolumeWith(5L), TestUtils.newVolumeWith(HARD_LIMIT));
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics, broker2Metrics), () -> List.of("1", "2"), MISSING_DATA_QUOTA_FACTOR, Duration.ofHours(1));
         quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When

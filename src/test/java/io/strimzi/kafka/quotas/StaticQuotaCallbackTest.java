@@ -109,6 +109,22 @@ class StaticQuotaCallbackTest {
     }
 
     @Test
+    void shouldPauseForZeroQuotaFactor() {
+        //Given
+        KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
+        target = new StaticQuotaCallback(Executors.newSingleThreadScheduledExecutor(),
+            (stringMap, aBoolean) -> spyOnQuotaConfig(stringMap, aBoolean, new FixedQuotaFactorSupplier(0.0)),
+            kafkaClientManager);
+        target.configure(Map.of(StaticQuotaConfig.PRODUCE_QUOTA_PROP, 1024));
+
+        //When
+        double quotaLimit = target.quotaLimit(ClientQuotaType.PRODUCE, target.quotaMetricTags(ClientQuotaType.PRODUCE, foo, "clientId"));
+
+        //Then
+        assertThat(quotaLimit).isEqualTo(1.0, EPSILON_OFFSET);
+    }
+
+    @Test
     void shouldReturnNonZeroQuota() {
         //Given
         KafkaPrincipal foo = new KafkaPrincipal(KafkaPrincipal.USER_TYPE, "foo");
@@ -216,6 +232,7 @@ class StaticQuotaCallbackTest {
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
 
         //When
+        //Because calling configure again could potentially re-configure the scheduledTask it should be cancelled and re-scheduled
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
 
         //Then
@@ -260,6 +277,7 @@ class StaticQuotaCallbackTest {
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
 
         //When
+        //Because calling configure again could potentially re-configure the scheduledTask it should be cancelled and re-scheduled
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
 
         //Then
@@ -304,6 +322,7 @@ class StaticQuotaCallbackTest {
         staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, interval));
 
         //When
+        //Because calling configure again could potentially re-configure the scheduledTask it should be cancelled and re-scheduled
         staticQuotaCallback.configure(Map.of(QUOTA_POLICY_INTERVAL_PROP, interval));
 
         //Then

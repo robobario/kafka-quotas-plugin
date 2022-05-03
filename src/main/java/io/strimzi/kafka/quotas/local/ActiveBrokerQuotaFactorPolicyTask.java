@@ -96,7 +96,7 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
                 }
                 if (brokerSnapshot.getSnapshotAt().isBefore(metricsValidAfter)) {
                     log.warn("Stale metrics found for {} setting quotaFactor to {}", brokerId, missingDataQuotaFactor);
-                    log.debug("Stale metrics found metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
+                    log.debug("Stale metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
                     quotaRemaining = missingDataQuotaFactor;
                     break;
                 }

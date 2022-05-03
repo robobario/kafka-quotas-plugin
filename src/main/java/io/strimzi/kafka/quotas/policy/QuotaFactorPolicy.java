@@ -12,7 +12,7 @@ import io.strimzi.kafka.quotas.types.Volume;
 public interface QuotaFactorPolicy {
 
     /**
-     * Does the particular volume breach this policy's defined hard limit.
+     * Does the particular volume breach this policy's defined hard limit?
      *
      * @param volumeDetails details of the volumes in question.
      * @return <code>true</code> if this policy considers the volume to breach the limit otherwise <code>false</code>
@@ -20,7 +20,7 @@ public interface QuotaFactorPolicy {
     boolean breachesHardLimit(Volume volumeDetails);
 
     /**
-     * Does the particular volume breach this policy's defined soft limit.
+     * Does the particular volume breach this policy's defined soft limit?
      *
      * @param volumeDetails details of the volumes in question.
      * @return <code>true</code> if this policy considers the volume to breach the limit otherwise <code>false</code>

@@ -5,6 +5,7 @@
 
 package io.strimzi.kafka.quotas.distributed;
 
+import java.time.Duration;
 import java.util.Map;
 
 import io.strimzi.kafka.quotas.types.UpdateQuotaFactor;
@@ -22,6 +23,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import static io.strimzi.kafka.quotas.distributed.KafkaClientFactory.LISTENER_PORT_PROP;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
@@ -37,11 +39,11 @@ class KafkaClientManagerTest {
     @Mock(lenient = true)
     KafkaClientFactory kafkaClientFactory;
 
-    @Mock(lenient = true)
+    @Mock
     Producer<String, VolumeUsageMetrics> producer;
-    @Mock(lenient = true)
+    @Mock
     Consumer<String, VolumeUsageMetrics> consumer;
-    @Mock(lenient = true)
+    @Mock
     Admin adminClient;
 
     @SuppressWarnings("resource")
@@ -166,7 +168,7 @@ class KafkaClientManagerTest {
         kafkaClientManager.close();
 
         //Then
-        verify(producer).close();
+        verify(producer).close(any(Duration.class));
     }
 
     @Test
@@ -178,7 +180,7 @@ class KafkaClientManagerTest {
         kafkaClientManager.close();
 
         //Then
-        verify(consumer).close();
+        verify(consumer).close(any(Duration.class));
     }
 
     @Test
@@ -190,6 +192,6 @@ class KafkaClientManagerTest {
         kafkaClientManager.close();
 
         //Then
-        verify(adminClient).close();
+        verify(adminClient).close(any(Duration.class));
     }
 }

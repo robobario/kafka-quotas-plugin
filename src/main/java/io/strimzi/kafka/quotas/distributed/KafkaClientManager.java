@@ -6,6 +6,8 @@
 package io.strimzi.kafka.quotas.distributed;
 
 import java.io.Closeable;
+import java.time.Duration;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -25,6 +27,7 @@ import static org.slf4j.LoggerFactory.getLogger;
 
 public class KafkaClientManager implements Closeable, Configurable {
     private static final IllegalStateException NO_CLIENT_MANAGER_EXCEPTION = new IllegalStateException("no kafkaClientFactory available. Ensure it is provided before constructing clients");
+    public static final Duration CLOSE_TIMEOUT = Duration.of(10, ChronoUnit.SECONDS);
     private final ConcurrentMap<Class<?>, Producer<String, ?>> producersByType;
 
     private final ConcurrentMap<Class<?>, Consumer<String, ?>> consumersByType;
@@ -53,22 +56,22 @@ public class KafkaClientManager implements Closeable, Configurable {
     public void close() {
         for (Producer<String, ?> producer : producersByType.values()) {
             try {
-                producer.close();
+                producer.close(CLOSE_TIMEOUT);
             } catch (Exception e) {
                 log.warn("caught exception closing producer. Continuing to closing others: {}", e.getMessage(), e);
             }
         }
         for (Consumer<String, ?> consumer : consumersByType.values()) {
             try {
-                consumer.close();
+                consumer.close(CLOSE_TIMEOUT);
             } catch (Exception e) {
                 log.warn("caught exception closing consumer. Continuing to closing others: {}", e.getMessage(), e);
             }
         }
         try {
-            adminClientHolder.get(Admin.class).close();
+            adminClientHolder.get(Admin.class).close(CLOSE_TIMEOUT);
         } catch (Exception e) {
-            log.warn("caught exception closing consumer. Continuing to closing others: {}", e.getMessage(), e);
+            log.warn("caught exception closing adminClient: {}", e.getMessage(), e);
         }
     }
 
@@ -85,6 +88,9 @@ public class KafkaClientManager implements Closeable, Configurable {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
         return (Producer<String, T>) producersByType.computeIfAbsent(messageType, key -> {
+            //Disable batching as we have small and comparatively rarely published messages.
+            //Reduced acks to 1 as we want to keep publishing regardless of cluster health (as this is one metric of cluster health)
+            //Acks=1 implicitly disables idempotence but make it explicit here, so we know its deliberate and acknowledged.
             final Map<String, Object> customConfig = Map.of(ProducerConfig.BATCH_SIZE_CONFIG, 0,
                     ProducerConfig.CLIENT_ID_CONFIG, messageType.getSimpleName(),
                     ProducerConfig.ACKS_CONFIG, "1",

@@ -89,7 +89,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(STORAGE_QUOTA_HARD_PROP, LONG, Long.MAX_VALUE, HIGH, "Soft limit for amount of storage allowed (in bytes)")
                         .define(STORAGE_CHECK_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between storage check runs (in seconds, default of 0 means disabled")
                         .define(QUOTA_POLICY_INTERVAL_PROP, INT, 0, MEDIUM, "Interval between quota policy runs (in seconds, default of 0 means disabled")
-                        .define(MISSING_DATA_QUOTA_FACTOR_PROP, DOUBLE, "0.0", ConfigDef.Range.between(0.0, 1.0), MEDIUM, "What factor should be applied if there is insufficient data to make a quota decision. Values ")
+                        .define(MISSING_DATA_QUOTA_FACTOR_PROP, DOUBLE, "0.0", ConfigDef.Range.between(0.0, 1.0), MEDIUM, "What factor should be applied if there is insufficient data to make a quota decision. Expressed as a percentage between 0.0 and 1.0")
                         .define(VOLUME_USAGE_METRICS_TOPIC_PROP, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
                         .define(TOPIC_PARTITION_COUNT_PROP, INT, "1", LOW, "The number of partitions to use for the topics used by the plugin")
                         .define(KAFKA_READ_TIMEOUT_SECONDS_PROP, INT, "10", LOW, "How long should the plugin wait for kafka interactions")

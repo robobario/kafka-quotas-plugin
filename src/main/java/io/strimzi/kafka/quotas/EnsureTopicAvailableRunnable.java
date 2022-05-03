@@ -40,29 +40,36 @@ public class EnsureTopicAvailableRunnable implements Runnable {
             Thread.currentThread().interrupt();
             log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage());
         } catch (ExecutionException e) {
-            log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage());
+            log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage(), e);
         }
     }
 
     /*test*/ CompletableFuture<Void> ensureTopicIsAvailable(String topic, int partitionCount) {
         final CompletableFuture<Void> createTopicFuture = new CompletableFuture<>();
-        log.info("ensuring {} exists", topic);
-        final NewTopic newTopic = new NewTopic(topic, Optional.of(partitionCount), Optional.empty());
-        newTopic.configs(Map.of(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT));
-        final List<NewTopic> topics = List.of(newTopic);
+        log.debug("ensuring {} exists", topic);
+
+        final NewTopic newTopic = buildNewTopic(topic, partitionCount);
         kafkaClientManager.adminClient()
-                .createTopics(topics)
+                .createTopics(List.of(newTopic))
                 .all()
                 .whenComplete((unused, throwable) -> {
                     if (throwable != null && !(throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException)) {
                         log.warn("Error creating topic: {}: {}", topic, throwable.getMessage(), throwable);
                         createTopicFuture.completeExceptionally(throwable);
                         return;
+                    } else if (throwable != null && (throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException)) {
+                        log.debug("{} exists", topic);
+                    } else {
+                        log.info("Created topic: {}", newTopic);
                     }
-                    log.info("Created topic: {}", topic);
                     createTopicFuture.complete(null);
                 });
-        //TODO should we return this or just wait here?
         return createTopicFuture;
+    }
+
+    private NewTopic buildNewTopic(String topic, int partitionCount) {
+        final NewTopic newTopic = new NewTopic(topic, Optional.of(partitionCount), Optional.empty());
+        newTopic.configs(Map.of(TopicConfig.CLEANUP_POLICY_CONFIG, TopicConfig.CLEANUP_POLICY_COMPACT));
+        return newTopic;
     }
 }
