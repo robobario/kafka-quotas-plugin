@@ -96,26 +96,30 @@ public class FileSystemDataSourceTask implements DataSourceTask {
 
     @Override
     public void run() {
-        log.debug("check filesystem usage");
-        final Instant snapshotAt = Instant.now();
-        final LongAdder currentConsumedSpace = new LongAdder();
-        final List<Volume> volumes = fileStores.stream()
-                .map(fs -> {
-                    try {
-                        final long consumedSpace = fs.getTotalSpace() - fs.getUsableSpace();
-                        currentConsumedSpace.add(consumedSpace);
-                        return new Volume(fs.name(), fs.getTotalSpace(), consumedSpace);
-                    } catch (IOException e) {
-                        log.warn("Unable to read disk usage for {} due to {}", fs.name(), e.getMessage(), e);
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toUnmodifiableList());
-        totalConsumedSpace.set(currentConsumedSpace.longValue());
-        final VolumeUsageMetrics volumeUsageMetrics = new VolumeUsageMetrics(brokerId, snapshotAt, hardLimit, softLimit, volumes);
-        log.debug("publishing volume usage metrics: {}", volumeUsageMetrics);
-        volumeUsageMetricsConsumer.accept(volumeUsageMetrics);
+        try {
+            log.debug("check filesystem usage");
+            final Instant snapshotAt = Instant.now();
+            final LongAdder currentConsumedSpace = new LongAdder();
+            final List<Volume> volumes = fileStores.stream()
+                    .map(fs -> {
+                        try {
+                            final long consumedSpace = fs.getTotalSpace() - fs.getUsableSpace();
+                            currentConsumedSpace.add(consumedSpace);
+                            return new Volume(fs.name(), fs.getTotalSpace(), consumedSpace);
+                        } catch (IOException e) {
+                            log.warn("Unable to read disk usage for {} due to {}", fs.name(), e.getMessage(), e);
+                            return null;
+                        }
+                    })
+                    .filter(Objects::nonNull)
+                    .collect(Collectors.toUnmodifiableList());
+            totalConsumedSpace.set(currentConsumedSpace.longValue());
+            final VolumeUsageMetrics volumeUsageMetrics = new VolumeUsageMetrics(brokerId, snapshotAt, hardLimit, softLimit, volumes);
+            log.debug("publishing volume usage metrics: {}", volumeUsageMetrics);
+            volumeUsageMetricsConsumer.accept(volumeUsageMetrics);
+        } catch (Exception e) {
+            log.warn("Error during FileSystemDataSourceTask execution: {}",  e.getMessage(), e);
+        }
     }
 
 }

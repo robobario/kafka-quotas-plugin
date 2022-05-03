@@ -80,41 +80,45 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
 
     @Override
     public void run() {
-        updateMetricsCache();
-        double quotaRemaining = 1.0;
-        final Collection<String> activeBrokers = activeBrokerIdsSupplier.get();
-        log.info("checking volume usage for brokerIds: {}", activeBrokers);
-        final Instant metricsValidAfter = Instant.now().minus(metricsStaleAfter);
-        for (String brokerId : activeBrokers) {
-            final VolumeUsageMetrics brokerSnapshot = mostRecentMetricsPerBroker.get(brokerId);
-            if (brokerSnapshot == null) {
-                log.warn("no metrics found for {} setting quotaFactor to {}", brokerId, missingDataQuotaFactor);
-                log.debug("no metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
-                quotaRemaining = missingDataQuotaFactor;
-                break;
-            }
-            if (brokerSnapshot.getSnapshotAt().isBefore(metricsValidAfter)) {
-                log.warn("Stale metrics found for {} setting quotaFactor to {}", brokerId, missingDataQuotaFactor);
-                log.debug("Stale metrics found metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
-                quotaRemaining = missingDataQuotaFactor;
-                break;
-            }
-            final QuotaFactorPolicy quotaFactorPolicy = mapLimitsToQuotaPolicy(brokerSnapshot);
-            for (Volume volume : brokerSnapshot.getVolumes()) {
-                if (quotaFactorPolicy.breachesHardLimit(volume)) {
-                    quotaRemaining = quotaFactorPolicy.quotaFactor(volume);
-                    log.warn("hard limit breach for broker-{}:{} setting quotaFactor to 0.0", brokerId, volume.getVolumeName());
+        try {
+            updateMetricsCache();
+            double quotaRemaining = 1.0;
+            final Collection<String> activeBrokers = activeBrokerIdsSupplier.get();
+            log.info("checking volume usage for brokerIds: {}", activeBrokers);
+            final Instant metricsValidAfter = Instant.now().minus(metricsStaleAfter);
+            for (String brokerId : activeBrokers) {
+                final VolumeUsageMetrics brokerSnapshot = mostRecentMetricsPerBroker.get(brokerId);
+                if (brokerSnapshot == null) {
+                    log.warn("no metrics found for {} setting quotaFactor to {}", brokerId, missingDataQuotaFactor);
+                    log.debug("no metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
+                    quotaRemaining = missingDataQuotaFactor;
                     break;
                 }
-                quotaRemaining = Math.min(quotaRemaining, quotaFactorPolicy.quotaFactor(volume));
+                if (brokerSnapshot.getSnapshotAt().isBefore(metricsValidAfter)) {
+                    log.warn("Stale metrics found for {} setting quotaFactor to {}", brokerId, missingDataQuotaFactor);
+                    log.debug("Stale metrics found metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
+                    quotaRemaining = missingDataQuotaFactor;
+                    break;
+                }
+                final QuotaFactorPolicy quotaFactorPolicy = mapLimitsToQuotaPolicy(brokerSnapshot);
+                for (Volume volume : brokerSnapshot.getVolumes()) {
+                    if (quotaFactorPolicy.breachesHardLimit(volume)) {
+                        quotaRemaining = quotaFactorPolicy.quotaFactor(volume);
+                        log.warn("hard limit breach for broker-{}:{} setting quotaFactor to 0.0", brokerId, volume.getVolumeName());
+                        break;
+                    }
+                    quotaRemaining = Math.min(quotaRemaining, quotaFactorPolicy.quotaFactor(volume));
+                }
             }
-        }
-        double updatedQuotaFactor = quotaRemaining;
-        log.info("Broker volume usage check complete applying quota factor: {}", updatedQuotaFactor);
-        final UpdateQuotaFactor updateMessage = new UpdateQuotaFactor(Instant.now(), updatedQuotaFactor);
-        latestUpdate.set(updateMessage);
-        for (Consumer<UpdateQuotaFactor> updateListener : updateListeners) {
-            updateListener.accept(updateMessage);
+            double updatedQuotaFactor = quotaRemaining;
+            log.info("Broker volume usage check complete applying quota factor: {}", updatedQuotaFactor);
+            final UpdateQuotaFactor updateMessage = new UpdateQuotaFactor(Instant.now(), updatedQuotaFactor);
+            latestUpdate.set(updateMessage);
+            for (Consumer<UpdateQuotaFactor> updateListener : updateListeners) {
+                updateListener.accept(updateMessage);
+            }
+        } catch (Exception e) {
+            log.warn("Error during ActiveBrokerQuotaFactorPolicyTask execution: {}", e.getMessage(), e);
         }
     }
 
