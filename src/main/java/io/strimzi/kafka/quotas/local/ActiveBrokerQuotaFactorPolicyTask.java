@@ -115,6 +115,12 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
             notifyNewQuota(updatedQuotaFactor);
         } catch (Exception e) {
             log.warn("Error during ActiveBrokerQuotaFactorPolicyTask execution: {}", e.getMessage(), e);
+            final double quotaFactor = updateQuotaFactor(latestUpdate.get().getFactor(), missingDataQuotaFactor);
+            try {
+                notifyNewQuota(quotaFactor);
+            } catch (Exception ex) {
+                log.warn("error notifying listeners: {}", ex.getMessage(), ex);
+            }
         }
     }
 
