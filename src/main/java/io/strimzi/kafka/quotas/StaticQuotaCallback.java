@@ -6,15 +6,17 @@ package io.strimzi.kafka.quotas;
 
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.BiFunction;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -43,11 +45,10 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     public static final String METRICS_SCOPE = "io.strimzi.kafka.quotas.StaticQuotaCallback";
 
     private volatile List<String> excludedPrincipalNameList = List.of();
-    private final AtomicBoolean resetQuota = new AtomicBoolean(true);
+    private final Set<ClientQuotaType> resetQuota = Collections.newSetFromMap(new ConcurrentHashMap<>());
     private final ScheduledExecutorService executorService;
     private final BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory;
     private final KafkaClientManager kafkaClientManager;
-    private final static long LOGGING_DELAY_MS = 1000;
 
     //Default to no restrictions until things have been configured.
     private volatile QuotaSupplier quotaSupplier = UnlimitedQuotaSupplier.UNLIMITED_QUOTA_SUPPLIER;
@@ -69,6 +70,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     }
 
     StaticQuotaCallback(ScheduledExecutorService executorService, BiFunction<Map<String, ?>, Boolean, StaticQuotaConfig> pluginConfigFactory, KafkaClientManager kafkaClientManager) {
+        this.resetQuota.addAll(Arrays.asList(ClientQuotaType.values()));
         this.executorService = executorService;
         this.pluginConfigFactory = pluginConfigFactory;
         this.kafkaClientManager = kafkaClientManager;
@@ -97,37 +99,21 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
 
     @Override
     public Double quotaLimit(ClientQuotaType quotaType, Map<String, String> metricTags) {
+        final double limit;
         if (Boolean.TRUE.toString().equals(metricTags.get(EXCLUDED_PRINCIPAL_QUOTA_KEY))) {
-            return QuotaSupplier.UNLIMITED;
-        }
-
-        final double requestQuota = quotaSupplier.quotaFor(quotaType, metricTags);
-        if (ClientQuotaType.PRODUCE.equals(quotaType)) {
-            //Kafka will suffer an A divide by zero if returned 0.0 from `quotaLimit` so ensure that we don't even if we have zero quota available
-            return Math.max(requestQuota * quotaFactorSupplier.get(), QuotaSupplier.PAUSED);
-        }
-        return requestQuota;
-    }
-
-    /**
-     * Put a small delay between logging
-     */
-    private void maybeLog(AtomicLong lastLoggedMessageTimeMs, String format, Object... args) {
-        if (log.isDebugEnabled()) {
-            long now = System.currentTimeMillis();
-            final boolean[] shouldLog = {true};
-            lastLoggedMessageTimeMs.getAndUpdate(current -> {
-                if (now - current >= LOGGING_DELAY_MS) {
-                    shouldLog[0] = true;
-                    return now;
-                }
-                shouldLog[0] = false;
-                return current;
-            });
-            if (shouldLog[0]) {
-                log.debug(format, args);
+            limit = QuotaSupplier.UNLIMITED;
+        } else {
+            final double requestQuota = quotaSupplier.quotaFor(quotaType, metricTags);
+            if (ClientQuotaType.PRODUCE.equals(quotaType)) {
+                //Kafka will suffer an A divide by zero if returned 0.0 from `quotaLimit` so ensure that we don't even if we have zero quota available
+                limit = Math.max(requestQuota * quotaFactorSupplier.get(), QuotaSupplier.PAUSED);
+            } else {
+                limit = requestQuota;
             }
         }
+
+        log.trace("Quota limit for metric tags {} : {}", metricTags, limit);
+        return limit;
     }
 
     @Override
@@ -142,7 +128,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
 
     @Override
     public boolean quotaResetRequired(ClientQuotaType quotaType) {
-        return resetQuota.getAndSet(false);
+        return resetQuota.remove(quotaType);
     }
 
     @Override
@@ -187,7 +173,10 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         quotaFactorSupplier = config.quotaFactorSupplier();
         excludedPrincipalNameList = config.getExcludedPrincipalNameList();
 
-        quotaFactorSupplier.addUpdateListener(() -> resetQuota.set(true));
+        quotaFactorSupplier.addUpdateListener(() -> {
+            log.debug("Quota reset required for : {}", ClientQuotaType.PRODUCE);
+            resetQuota.add(ClientQuotaType.PRODUCE);
+        });
 
         List<Path> logDirs = config.getLogDirs().stream().map(Paths::get).collect(Collectors.toList());
 

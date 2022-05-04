@@ -23,6 +23,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -169,8 +171,9 @@ class StaticQuotaCallbackTest {
         assertThat(metricTags).containsEntry("excluded-principal-quota-key", "true");
     }
 
-    @Test
-    void quotaResetRequired() {
+    @ParameterizedTest(name = "quotaResetRequired: {argumentsWithNames}")
+    @EnumSource(ClientQuotaType.class)
+    void quotaResetRequired(ClientQuotaType quotaType) {
         //Given
         final QuotaFactorSupplier quotaFactorSupplier = mock(QuotaFactorSupplier.class);
         target = new StaticQuotaCallback(Executors.newSingleThreadScheduledExecutor(),
@@ -181,15 +184,16 @@ class StaticQuotaCallbackTest {
         target.configure(Map.of());
         final Runnable factorUpdateListener = captor.getValue();
         //Validate initial state
-        assertTrue(target.quotaResetRequired(ClientQuotaType.PRODUCE), "unexpected initial state");
-        assertFalse(target.quotaResetRequired(ClientQuotaType.PRODUCE), "unexpected state on subsequent call without storage state change");
+        assertTrue(target.quotaResetRequired(quotaType), "unexpected initial state");
+        assertFalse(target.quotaResetRequired(quotaType), "unexpected state on subsequent call without storage state change");
 
         //When
         factorUpdateListener.run();
 
         //Then
-        assertTrue(target.quotaResetRequired(ClientQuotaType.PRODUCE), "unexpected initial state");
-        assertFalse(target.quotaResetRequired(ClientQuotaType.PRODUCE), "unexpected state on subsequent call without storage state change");
+        // (only quota type produce is affected by the storage state change).
+        assertEquals(quotaType == ClientQuotaType.PRODUCE, target.quotaResetRequired(quotaType), "unexpected state following storage state change for quota type : " + quotaType);
+        assertFalse(target.quotaResetRequired(quotaType), "unexpected state on subsequent call without storage state change");
 
     }
 
