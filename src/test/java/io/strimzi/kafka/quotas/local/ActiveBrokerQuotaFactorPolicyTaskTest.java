@@ -8,7 +8,6 @@ package io.strimzi.kafka.quotas.local;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -38,20 +37,22 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     private static final long HARD_LIMIT = 10L;
     private static final double MISSING_DATA_QUOTA_FACTOR = 0.0;
     private final Double[] updates = new Double[1];
+    private List<String> activeBrokers;
     private ActiveBrokerQuotaFactorPolicyTask quotaPolicyTask;
-    private VolumeUsageMetrics volumeUsageMetrics;
+    private List<VolumeUsageMetrics> currentMetrics;
 
     @BeforeEach
     void setUp() {
-        volumeUsageMetrics = generateUsageMetrics("-1", Instant.now(), TestUtils.newVolumeWith(8L));
-        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(volumeUsageMetrics), () -> List.of("-1"), MISSING_DATA_QUOTA_FACTOR, Duration.ofHours(1));
+        activeBrokers = List.of("1");
+        currentMetrics = List.of(generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(8L)));
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> currentMetrics, () -> activeBrokers, MISSING_DATA_QUOTA_FACTOR, Duration.ofHours(1));
+        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
     }
 
     @Test
     void shouldUpdateListener() {
         //Given
         final double expectedFactor = 0.4;
-        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
         quotaPolicyTask.run();
@@ -63,8 +64,7 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     @Test
     void shouldNotifyOfHardLimitBreach() {
         //Given
-        volumeUsageMetrics = generateUsageMetrics("-1", Instant.now(), TestUtils.newVolumeWith(HARD_LIMIT));
-        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
+        currentMetrics = List.of(generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(HARD_LIMIT)));
 
         //When
         quotaPolicyTask.run();
@@ -76,10 +76,10 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     @Test
     void shouldNotifyOfHardLimitBreachAcrossMultipleBrokers() {
         //Given
-        final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
-        final VolumeUsageMetrics broker2Metrics = generateUsageMetrics("2", Instant.now(), TestUtils.newVolumeWith(5L), TestUtils.newVolumeWith(HARD_LIMIT));
-        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics, broker2Metrics), () -> List.of("1", "2"), MISSING_DATA_QUOTA_FACTOR, Duration.ofHours(1));
-        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
+        activeBrokers = List.of("1", "2");
+        currentMetrics = List.of(
+                generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L)),
+                generateUsageMetrics("2", Instant.now(), TestUtils.newVolumeWith(5L), TestUtils.newVolumeWith(HARD_LIMIT)));
 
         //When
         quotaPolicyTask.run();
@@ -91,9 +91,8 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     @Test
     void shouldNotifySmallestQuotaFactor() {
         //Given
-        volumeUsageMetrics = generateUsageMetrics("-1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(8L));
         final double expectedFactor = 0.4;
-        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
+        currentMetrics = List.of(generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(8L)));
 
         //When
         quotaPolicyTask.run();
@@ -105,11 +104,12 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     @Test
     void shouldNotifySmallestQuotaFactorAcrossMultipleBrokers() {
         //Given
-        final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
-        final VolumeUsageMetrics broker2Metrics = generateUsageMetrics("2", Instant.now(), TestUtils.newVolumeWith(7L), TestUtils.newVolumeWith(8L));
         final double expectedFactor = 0.4;
-        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics, broker2Metrics), () -> List.of("1", "2"), MISSING_DATA_QUOTA_FACTOR, Duration.ofHours(1));
-        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
+
+        activeBrokers = List.of("1", "2");
+        currentMetrics = List.of(
+                generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L)),
+                generateUsageMetrics("2", Instant.now(), TestUtils.newVolumeWith(7L), TestUtils.newVolumeWith(8L)));
 
         //When
         quotaPolicyTask.run();
@@ -121,21 +121,21 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     @Test
     void shouldTrackUsageForBrokerBetweenUpdates() {
         //Given
+        final double expectedFactor = 0.4;
+        activeBrokers = List.of("1", "2");
+        currentMetrics = List.of();
         final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(7L), TestUtils.newVolumeWith(8L));
         final VolumeUsageMetrics broker2Metrics = generateUsageMetrics("2", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
-        final List<VolumeUsageMetrics> currentMetrics = new ArrayList<>();
-        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> currentMetrics, () -> List.of("1", "2"), MISSING_DATA_QUOTA_FACTOR, Duration.ofHours(1));
-        final double expectedFactor = 0.4;
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> currentMetrics, () -> activeBrokers, MISSING_DATA_QUOTA_FACTOR, Duration.ofHours(1));
 
         //Notify the first brokers metrics
-        currentMetrics.add(broker1Metrics);
+        currentMetrics = List.of(broker1Metrics);
         quotaPolicyTask.run();
 
         quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //Notify the second brokers metrics
-        currentMetrics.clear();
-        currentMetrics.add(broker2Metrics);
+        currentMetrics = List.of(broker2Metrics);
 
         //When
         quotaPolicyTask.run();
@@ -147,9 +147,42 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     @Test
     void shouldNotifyConfiguredQuotaForMissingBroker() {
         //Given
-        final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
         final double expectedFactor = 0.1;
-        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics), () -> List.of("1", "2"), 0.1, Duration.ofHours(1));
+        activeBrokers = List.of("1", "2");
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> currentMetrics, () -> activeBrokers, 0.1, Duration.ofHours(1));
+        quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
+
+        //When
+        quotaPolicyTask.run();
+
+        //Then
+        assertThat(updates).hasSameElementsAs(List.of(expectedFactor));
+    }
+
+    @Test
+    void shouldNotifyHardLimitBreachEvenWithMissingBroker() {
+        //Given
+        final double expectedFactor = 0.0;
+        activeBrokers = List.of("1", "2");
+        currentMetrics = List.of(generateUsageMetrics("2", Instant.now(), TestUtils.newVolumeWith(10L), TestUtils.newVolumeWith(7L)));
+
+        //When
+        quotaPolicyTask.run();
+
+        //Then
+        assertThat(updates).hasSameElementsAs(List.of(expectedFactor));
+    }
+
+    @Test
+    void shouldNotifySmallestFactorEvenWithMissingBroker() {
+        //Given
+        final double expectedFactor = 0.8;
+        activeBrokers = List.of("1", "2", "3");
+        currentMetrics = List.of(
+                generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(4L)),
+                generateUsageMetrics("3", Instant.now(), TestUtils.newVolumeWith(SOFT_LIMIT + 1)));
+
+        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> currentMetrics, () -> activeBrokers, 1.0, Duration.ofHours(1));
         quotaPolicyTask.addListener(updateQuotaFactor -> updates[0] = updateQuotaFactor.getFactor());
 
         //When
@@ -179,6 +212,7 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     @Test
     void shouldMapUsageMetricsToQuotaPolicy() {
         //Given
+        final VolumeUsageMetrics volumeUsageMetrics = generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(8L));
 
         //When
         final QuotaFactorPolicy actualQuotaFactorPolicy = quotaPolicyTask.mapLimitsToQuotaPolicy(volumeUsageMetrics);
@@ -195,9 +229,6 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
     @Test
     void shouldOnlyNotifyEachListenerOnce() {
         //Given
-        final VolumeUsageMetrics broker1Metrics = generateUsageMetrics("1", Instant.now(), TestUtils.newVolumeWith(6L), TestUtils.newVolumeWith(7L));
-
-        quotaPolicyTask = new ActiveBrokerQuotaFactorPolicyTask(10, () -> List.of(broker1Metrics), () -> List.of("1"), 0.6, Duration.ofHours(1));
         final Consumer<UpdateQuotaFactor> updateQuotaFactorConsumer = mock(Consumer.class);
         quotaPolicyTask.addListener(updateQuotaFactorConsumer);
         quotaPolicyTask.addListener(updateQuotaFactorConsumer);
@@ -222,6 +253,7 @@ class ActiveBrokerQuotaFactorPolicyTaskTest {
         assertThat(updates).hasSameElementsAs(List.of(expectedFactor));
 
     }
+
     @SuppressWarnings("unchecked")
     @Test
     void shouldNotNotifyListenerOnLateJoinIfRunNotInvoked() {
