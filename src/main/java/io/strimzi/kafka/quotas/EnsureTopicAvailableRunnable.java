@@ -53,18 +53,22 @@ public class EnsureTopicAvailableRunnable implements Runnable {
                 .createTopics(List.of(newTopic))
                 .all()
                 .whenComplete((unused, throwable) -> {
-                    if (throwable != null && !(throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException)) {
+                    if (throwable != null && isTopicExitsException(throwable)) {
+                        log.debug("{} exists", topic);
+                    } else if (throwable != null && !isTopicExitsException(throwable)) {
                         log.warn("Error creating topic: {}: {}", topic, throwable.getMessage(), throwable);
                         createTopicFuture.completeExceptionally(throwable);
                         return;
-                    } else if (throwable != null && (throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException)) {
-                        log.debug("{} exists", topic);
                     } else {
                         log.info("Created topic: {}", newTopic);
                     }
                     createTopicFuture.complete(null);
                 });
         return createTopicFuture;
+    }
+
+    private boolean isTopicExitsException(Throwable throwable) {
+        return throwable instanceof TopicExistsException || throwable.getCause() instanceof TopicExistsException;
     }
 
     private NewTopic buildNewTopic(String topic, int partitionCount) {
