@@ -5,7 +5,7 @@
         "http://www.puppycrawl.com/dtds/suppressions_1_1.dtd">
 
 <suppressions>
-
+    <suppress files="[\\/]generated-sources[\\/]" checks="[a-zA-Z0-9]*"/>
     <!-- Note that [/\\] must be used as the path separator for cross-platform support -->
 
 </suppressions>

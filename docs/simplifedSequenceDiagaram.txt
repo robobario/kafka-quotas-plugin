@@ -1,0 +1,27 @@
+//Generate with https://sequencediagram.org/
+title Cluster wide quota Limits
+
+participant Producer1
+participant BrokerA
+participant BrokerB
+participant BrokerC
+
+participant MetricsTopic
+
+
+BrokerA->MetricsTopic:publish <BrokerId,MeticsSnapshot>
+BrokerB->MetricsTopic:publish <BrokerId,MeticsSnapshot>
+BrokerC->MetricsTopic:publish <BrokerId,MeticsSnapshot>
+
+BrokerA<-MetricsTopic:Read Map<<BrokerId,MeticsSnapshot>>
+BrokerA-->BrokerA:Calculate quotaFactor from data \nfrom all *brokers*
+
+Producer1->BrokerA:Produce Request begins
+activate BrokerA
+activate Producer1
+BrokerA-->BrokerA:Calculate request quotaLimit
+
+Producer1->BrokerA:Send payload
+BrokerA-->BrokerA:Read payload
+deactivateafter BrokerA
+deactivateafter Producer1
