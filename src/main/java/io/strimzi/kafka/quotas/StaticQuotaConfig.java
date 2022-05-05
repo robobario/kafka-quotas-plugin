@@ -19,6 +19,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.InMemoryQuotaFactorSupplier;
@@ -27,6 +28,7 @@ import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.Node;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -179,7 +181,8 @@ public class StaticQuotaConfig extends AbstractConfig {
             //TODO nasty doing this in the supplier should potentially be done async.
             //As callers of the supplier don't necessarily expect blocking operations.
             try {
-                kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class)
+                List<TopicPartition> topicPartitions = IntStream.range(0, getPartitionCount()).mapToObj(i -> new TopicPartition(volumeUsageMetricsTopic, i)).collect(Collectors.toList());
+                kafkaClientManager.consumerFor(topicPartitions, VolumeUsageMetrics.class)
                         .poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
                         .records(volumeUsageMetricsTopic)
                         .forEach(cr -> usageMetrics.add(cr.value()));

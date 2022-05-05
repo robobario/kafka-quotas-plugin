@@ -22,6 +22,7 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.Configurable;
+import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 
 import static io.strimzi.kafka.quotas.distributed.KafkaClientFactory.CLIENT_ID_PREFIX_PROP;
@@ -105,7 +106,7 @@ public class KafkaClientManager implements Closeable, Configurable {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> Consumer<String, T> consumerFor(String topic, Class<T> messageType) {
+    public <T> Consumer<String, T> consumerFor(List<TopicPartition> topicPartition, Class<T> messageType) {
         if (kafkaClientFactory == null || kafkaClientConfig == null) {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
@@ -113,12 +114,11 @@ public class KafkaClientManager implements Closeable, Configurable {
         final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> {
             final Map<String, Object> customConfig = Map.of(
                     ConsumerConfig.CLIENT_ID_CONFIG, buildClientId("consumer", messageType),
-                    ConsumerConfig.GROUP_ID_CONFIG, messageType.getSimpleName() + "-" + brokerId,
                     ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
             return kafkaClientFactory.newConsumer(customConfig, key);
         });
 
-        kafkaConsumer.subscribe(List.of(topic));
+        kafkaConsumer.assign(topicPartition);
         return kafkaConsumer;
     }
 
