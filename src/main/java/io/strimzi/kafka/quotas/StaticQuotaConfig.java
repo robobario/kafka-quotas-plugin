@@ -182,10 +182,12 @@ public class StaticQuotaConfig extends AbstractConfig {
             //TODO nasty doing this in the supplier should potentially be done async.
             //As callers of the supplier don't necessarily expect blocking operations.
             try {
-                kafkaClientManager.consumerFor(topicPartitions, VolumeUsageMetrics.class)
-                        .poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
+                var consumer = kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
+                consumer.assign(topicPartitions);
+                consumer.poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
                         .records(volumeUsageMetricsTopic)
                         .forEach(cr -> usageMetrics.add(cr.value()));
+
             } catch (IllegalStateException e) {
                 log.warn("Unable to gather volumeUsageMetrics due to: {}", e.getMessage());
             }

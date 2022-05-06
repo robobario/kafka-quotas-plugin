@@ -8,7 +8,6 @@ package io.strimzi.kafka.quotas.distributed;
 import java.io.Closeable;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -22,7 +21,6 @@ import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.Producer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.Configurable;
-import org.apache.kafka.common.TopicPartition;
 import org.slf4j.Logger;
 
 import static io.strimzi.kafka.quotas.distributed.KafkaClientFactory.CLIENT_ID_PREFIX_PROP;
@@ -106,7 +104,7 @@ public class KafkaClientManager implements Closeable, Configurable {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> Consumer<String, T> consumerFor(List<TopicPartition> topicPartition, Class<T> messageType) {
+    public <T> Consumer<String, T> consumerFor(Class<T> messageType) {
         if (kafkaClientFactory == null || kafkaClientConfig == null) {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
@@ -118,7 +116,6 @@ public class KafkaClientManager implements Closeable, Configurable {
             return kafkaClientFactory.newConsumer(customConfig, key);
         });
 
-        kafkaConsumer.assign(topicPartition);
         return kafkaConsumer;
     }
 
