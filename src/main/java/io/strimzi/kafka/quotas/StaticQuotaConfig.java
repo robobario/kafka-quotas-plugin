@@ -19,14 +19,17 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.InMemoryQuotaFactorSupplier;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
+import org.apache.kafka.clients.consumer.InvalidOffsetException;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.Node;
+import org.apache.kafka.common.TopicPartition;
 import org.apache.kafka.common.config.AbstractConfig;
 import org.apache.kafka.common.config.ConfigDef;
 import org.apache.kafka.common.config.ConfigException;
@@ -183,8 +186,15 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
                         .records(volumeUsageMetricsTopic)
                         .forEach(cr -> usageMetrics.add(cr.value()));
+            } catch (InvalidOffsetException e) {
+                log.warn("Invalid offset when polling records. Reset the offset.", e);
+                // can remove this line after Keith's MR got merged
+                List<TopicPartition> topicPartitions = IntStream.range(0, getPartitionCount())
+                        .mapToObj(i -> new TopicPartition(volumeUsageMetricsTopic, i)).collect(Collectors.toList());
+                kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class)
+                        .seekToEnd(topicPartitions);
             } catch (Exception e) {
-                log.warn("Unable to gather volumeUsageMetrics.", e);
+                log.error("Unable to gather volumeUsageMetrics.", e);
             }
             return usageMetrics;
         };
