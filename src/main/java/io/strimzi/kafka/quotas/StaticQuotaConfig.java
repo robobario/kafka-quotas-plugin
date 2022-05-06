@@ -174,6 +174,7 @@ public class StaticQuotaConfig extends AbstractConfig {
      */
     public Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier() {
         final String volumeUsageMetricsTopic = getString(VOLUME_USAGE_METRICS_TOPIC_PROP);
+        final List<TopicPartition> topicPartitions = IntStream.range(0, getPartitionCount()).mapToObj(i -> new TopicPartition(volumeUsageMetricsTopic, i)).collect(Collectors.toList());
         //Note its important that the call to `consumerFor` happens in the supplier instance so that it doesn't
         //get triggered on the thread calling configure and blocking broker start up.
         return () -> {
@@ -181,7 +182,6 @@ public class StaticQuotaConfig extends AbstractConfig {
             //TODO nasty doing this in the supplier should potentially be done async.
             //As callers of the supplier don't necessarily expect blocking operations.
             try {
-                List<TopicPartition> topicPartitions = IntStream.range(0, getPartitionCount()).mapToObj(i -> new TopicPartition(volumeUsageMetricsTopic, i)).collect(Collectors.toList());
                 kafkaClientManager.consumerFor(topicPartitions, VolumeUsageMetrics.class)
                         .poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
                         .records(volumeUsageMetricsTopic)
