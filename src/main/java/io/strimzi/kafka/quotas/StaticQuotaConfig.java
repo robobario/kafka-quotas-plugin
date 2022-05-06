@@ -183,8 +183,8 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
                         .records(volumeUsageMetricsTopic)
                         .forEach(cr -> usageMetrics.add(cr.value()));
-            } catch (IllegalStateException e) {
-                log.warn("Unable to gather volumeUsageMetrics due to: {}", e.getMessage());
+            } catch (Exception e) {
+                log.warn("Unable to gather volumeUsageMetrics.", e);
             }
             return usageMetrics;
         };
