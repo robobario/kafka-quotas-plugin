@@ -190,11 +190,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .forEach(cr -> usageMetrics.add(cr.value()));
             } catch (InvalidOffsetException e) {
                 log.warn("Invalid offset when polling records. Reset the offset.", e);
-                // can remove this line after Keith's MR got merged
-                List<TopicPartition> topicPartitions = IntStream.range(0, getPartitionCount())
-                        .mapToObj(i -> new TopicPartition(volumeUsageMetricsTopic, i)).collect(Collectors.toList());
-                kafkaClientManager.consumerFor(volumeUsageMetricsTopic, VolumeUsageMetrics.class)
-                        .seekToEnd(topicPartitions);
+                kafkaClientManager.consumerFor(VolumeUsageMetrics.class).seekToEnd(topicPartitions);
             } catch (Exception e) {
                 log.error("Unable to gather volumeUsageMetrics.", e);
             }
