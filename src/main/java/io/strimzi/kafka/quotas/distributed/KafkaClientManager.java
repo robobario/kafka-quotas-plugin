@@ -8,7 +8,6 @@ package io.strimzi.kafka.quotas.distributed;
 import java.io.Closeable;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -105,7 +104,7 @@ public class KafkaClientManager implements Closeable, Configurable {
     }
 
     @SuppressWarnings("unchecked")
-    public <T> Consumer<String, T> consumerFor(String topic, Class<T> messageType) {
+    public <T> Consumer<String, T> consumerFor(Class<T> messageType) {
         if (kafkaClientFactory == null || kafkaClientConfig == null) {
             throw NO_CLIENT_MANAGER_EXCEPTION;
         }
@@ -113,12 +112,10 @@ public class KafkaClientManager implements Closeable, Configurable {
         final Consumer<String, T> kafkaConsumer = (Consumer<String, T>) consumersByType.computeIfAbsent(messageType, key -> {
             final Map<String, Object> customConfig = Map.of(
                     ConsumerConfig.CLIENT_ID_CONFIG, buildClientId("consumer", messageType),
-                    ConsumerConfig.GROUP_ID_CONFIG, messageType.getSimpleName() + "-" + brokerId,
                     ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "latest");
             return kafkaClientFactory.newConsumer(customConfig, key);
         });
 
-        kafkaConsumer.subscribe(List.of(topic));
         return kafkaConsumer;
     }
 

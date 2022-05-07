@@ -33,7 +33,6 @@ import static org.mockito.Mockito.verify;
 @ExtendWith(MockitoExtension.class)
 class KafkaClientManagerTest {
 
-    public static final String TEST_TOPIC = "Test_topic";
     private KafkaClientManager kafkaClientManager;
 
     @Mock(lenient = true)
@@ -81,7 +80,7 @@ class KafkaClientManagerTest {
         kafkaClientManager = new KafkaClientManager(kafkaClientConfig -> kafkaClientFactory);
 
         //When
-        assertThatThrownBy(() ->  kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class)).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() ->  kafkaClientManager.consumerFor(VolumeUsageMetrics.class)).isInstanceOf(IllegalStateException.class);
 
         //Then
     }
@@ -102,11 +101,11 @@ class KafkaClientManagerTest {
     @Test
     void shouldReuseConsumer() {
         //Given
-        final Consumer<String, VolumeUsageMetrics> initialConsumer = kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
+        final Consumer<String, VolumeUsageMetrics> initialConsumer = kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
         assertThat(initialConsumer).isNotNull();
 
         //When
-        final Consumer<String, VolumeUsageMetrics> subsequentConsumer = kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
+        final Consumer<String, VolumeUsageMetrics> subsequentConsumer = kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
 
         //Then
         assertThat(subsequentConsumer).isSameAs(initialConsumer);
@@ -149,11 +148,11 @@ class KafkaClientManagerTest {
         doReturn(mock(Consumer.class)).when(kafkaClientFactory).newConsumer(anyMap(), eq(UpdateQuotaFactor.class));
         //Use the raw type so the producers are actually testable.
         //Arguably a redundant test due to the type system but...
-        final Consumer initialConsumer = kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
+        final Consumer initialConsumer = kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
         assertThat(initialConsumer).isNotNull();
 
         //When
-        final Consumer subsequentConsumer = kafkaClientManager.consumerFor(TEST_TOPIC, UpdateQuotaFactor.class);
+        final Consumer subsequentConsumer = kafkaClientManager.consumerFor(UpdateQuotaFactor.class);
 
         //Then
         assertThat(subsequentConsumer).isNotNull().isNotSameAs(initialConsumer);
@@ -174,7 +173,7 @@ class KafkaClientManagerTest {
     @Test
     void shouldCloseConsumer() {
         //Given
-        kafkaClientManager.consumerFor(TEST_TOPIC, VolumeUsageMetrics.class);
+        kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
 
         //When
         kafkaClientManager.close();
