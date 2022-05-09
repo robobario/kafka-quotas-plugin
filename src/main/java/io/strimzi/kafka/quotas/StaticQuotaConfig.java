@@ -182,15 +182,21 @@ public class StaticQuotaConfig extends AbstractConfig {
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
             //TODO nasty doing this in the supplier should potentially be done async.
             //As callers of the supplier don't necessarily expect blocking operations.
+            var consumer = kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
             try {
-                var consumer = kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
                 consumer.assign(topicPartitions);
                 consumer.poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
                         .records(volumeUsageMetricsTopic)
                         .forEach(cr -> usageMetrics.add(cr.value()));
             } catch (InvalidOffsetException e) {
-                log.warn("Invalid offset when polling records. Reset the offset.", e);
-                kafkaClientManager.consumerFor(VolumeUsageMetrics.class).seekToEnd(topicPartitions);
+                log.warn("Invalid offset when polling records. Resetting the offset to latest.", e);
+                try {
+                    consumer.seekToEnd(topicPartitions);
+                } catch (IllegalStateException seekException) {
+                    log.error("Resetting offset failed because some partitions are not currently assigned to this consumer.", seekException);
+                } catch (IllegalArgumentException seekException) {
+                    log.error("Resetting offset failed because the partitions to be reset is null.", seekException);
+                }
             } catch (Exception e) {
                 log.error("Unable to gather volumeUsageMetrics.", e);
             }
