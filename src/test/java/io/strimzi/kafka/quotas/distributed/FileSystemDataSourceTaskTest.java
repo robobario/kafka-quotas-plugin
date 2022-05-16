@@ -11,13 +11,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.SortedMap;
 
 import com.google.common.jimfs.Configuration;
 import com.google.common.jimfs.Jimfs;
 import com.yammer.metrics.Metrics;
-import com.yammer.metrics.core.Gauge;
 import com.yammer.metrics.core.Metric;
 import com.yammer.metrics.core.MetricName;
 import io.strimzi.kafka.quotas.FileSystemDataSourceTask;
@@ -28,9 +26,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static io.strimzi.kafka.quotas.TestUtils.assertGaugeMetric;
+import static io.strimzi.kafka.quotas.TestUtils.getMetricGroup;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class FileSystemDataSourceTaskTest {
 
@@ -166,23 +165,4 @@ class FileSystemDataSourceTaskTest {
         }
         return numBlocks * BLOCK_SIZE;
     }
-
-    private SortedMap<MetricName, Metric> getMetricGroup(String p, String t) {
-        SortedMap<String, SortedMap<MetricName, Metric>> storageMetrics = Metrics.defaultRegistry().groupedMetrics((name, metric) -> p.equals(name.getScope()) && t.equals(name.getType()));
-        assertEquals(1, storageMetrics.size(), "unexpected number of metrics in group");
-        return storageMetrics.entrySet().iterator().next().getValue();
-    }
-
-    private <T> void assertGaugeMetric(SortedMap<MetricName, Metric> metrics, String name, T expected) {
-        Optional<Gauge<T>> desired = findGaugeMetric(metrics, name);
-        assertTrue(desired.isPresent(), String.format("metric with name %s not found in %s", name, metrics));
-        Gauge<T> gauge = desired.get();
-        assertEquals(expected, gauge.value(), String.format("metric %s has unexpected value", name));
-    }
-
-    @SuppressWarnings("unchecked")
-    private <T> Optional<Gauge<T>> findGaugeMetric(SortedMap<MetricName, Metric> metrics, String name) {
-        return metrics.entrySet().stream().filter(e -> name.equals(e.getKey().getName())).map(e -> (Gauge<T>) e.getValue()).findFirst();
-    }
-
 }
