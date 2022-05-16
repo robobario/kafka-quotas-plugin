@@ -38,9 +38,9 @@ public class EnsureTopicAvailableRunnable implements Runnable {
             ensureTopicIsAvailable(topic, partitionCount).get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage());
+            log.error("problem ensuring topic {} is available on the cluster.", topic, e);
         } catch (ExecutionException e) {
-            log.error("problem ensuring topic {} is available on the cluster due to: {}", topic, e.getMessage(), e);
+            log.error("problem ensuring topic {} is available on the cluster.", topic, e);
         }
     }
 
@@ -53,12 +53,14 @@ public class EnsureTopicAvailableRunnable implements Runnable {
                 .createTopics(List.of(newTopic))
                 .all()
                 .whenComplete((unused, throwable) -> {
-                    if (throwable != null && isTopicExitsException(throwable)) {
-                        log.debug("{} exists", topic);
-                    } else if (throwable != null && !isTopicExitsException(throwable)) {
-                        log.warn("Error creating topic: {}: {}", topic, throwable.getMessage(), throwable);
-                        createTopicFuture.completeExceptionally(throwable);
-                        return;
+                    if (throwable != null) {
+                        if (isTopicExitsException(throwable)) {
+                            log.debug("{} already exists.", topic);
+                        } else {
+                            log.warn("Error creating topic: {}.", topic, throwable);
+                            createTopicFuture.completeExceptionally(throwable);
+                            return;
+                        }
                     } else {
                         log.info("Created topic: {}", newTopic);
                     }

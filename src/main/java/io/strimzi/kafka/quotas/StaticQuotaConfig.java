@@ -26,6 +26,7 @@ import io.strimzi.kafka.quotas.local.InMemoryQuotaFactorSupplier;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
 import io.strimzi.kafka.quotas.types.Limit;
 import io.strimzi.kafka.quotas.types.VolumeUsageMetrics;
+import org.apache.kafka.clients.consumer.InvalidOffsetException;
 import org.apache.kafka.clients.producer.ProducerRecord;
 import org.apache.kafka.common.Node;
 import org.apache.kafka.common.TopicPartition;
@@ -181,15 +182,23 @@ public class StaticQuotaConfig extends AbstractConfig {
             List<VolumeUsageMetrics> usageMetrics = new ArrayList<>();
             //TODO nasty doing this in the supplier should potentially be done async.
             //As callers of the supplier don't necessarily expect blocking operations.
+            var consumer = kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
             try {
-                var consumer = kafkaClientManager.consumerFor(VolumeUsageMetrics.class);
                 consumer.assign(topicPartitions);
                 consumer.poll(Duration.ofSeconds(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP)))
                         .records(volumeUsageMetricsTopic)
                         .forEach(cr -> usageMetrics.add(cr.value()));
-
-            } catch (IllegalStateException e) {
-                log.warn("Unable to gather volumeUsageMetrics due to: {}", e.getMessage());
+            } catch (InvalidOffsetException e) {
+                log.warn("Invalid offset when polling records. Resetting the offset to latest.", e);
+                try {
+                    consumer.seekToEnd(topicPartitions);
+                } catch (IllegalStateException seekException) {
+                    log.error("Resetting offset failed because some partitions are not currently assigned to this consumer.", seekException);
+                } catch (IllegalArgumentException seekException) {
+                    log.error("Resetting offset failed because the partitions to be reset is null.", seekException);
+                }
+            } catch (Exception e) {
+                log.error("Unable to gather volumeUsageMetrics.", e);
             }
             return usageMetrics;
         };
