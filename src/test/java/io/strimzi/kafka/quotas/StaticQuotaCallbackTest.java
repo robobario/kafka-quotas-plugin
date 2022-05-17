@@ -52,7 +52,6 @@ import static org.mockito.Mockito.when;
 @ExtendWith(MockitoExtension.class)
 class StaticQuotaCallbackTest {
 
-    private static final String TEST_TOPIC = "wibble";
     private StaticQuotaCallback target;
 
     @Mock(lenient = true)
@@ -242,6 +241,7 @@ class StaticQuotaCallbackTest {
         //Then
         verify(scheduledFuture).cancel(false);
     }
+
     @Test
     void shouldNotScheduleEnsureTopicAvailableRunnable() {
         //Given

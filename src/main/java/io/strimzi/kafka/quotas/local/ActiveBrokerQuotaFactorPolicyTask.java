@@ -17,7 +17,10 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
+import com.yammer.metrics.Metrics;
+import com.yammer.metrics.core.Counter;
 import io.strimzi.kafka.quotas.QuotaFactorPolicyTask;
+import io.strimzi.kafka.quotas.StaticQuotaCallback;
 import io.strimzi.kafka.quotas.policy.ConsumedBytesLimitPolicy;
 import io.strimzi.kafka.quotas.policy.LimitPolicy;
 import io.strimzi.kafka.quotas.policy.MinFreeBytesLimitPolicy;
@@ -47,6 +50,7 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
     private final ConcurrentMap<String, VolumeUsageMetrics> mostRecentMetricsPerBroker;
 
     private final Logger log = getLogger(ActiveBrokerQuotaFactorPolicyTask.class);
+    private final Counter missingStateCounter;
 
     public ActiveBrokerQuotaFactorPolicyTask(int periodInSeconds, Supplier<Iterable<VolumeUsageMetrics>> volumeUsageMetricsSupplier, Supplier<Collection<String>> activeBrokerIdsSupplier, double missingDataQuotaFactor, Duration metricsStaleAfter) {
         this.periodInSeconds = periodInSeconds;
@@ -58,6 +62,7 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
         log.info("Checking active broker usage: every {} {}", periodInSeconds, getPeriodUnit());
         updateListeners = new CopyOnWriteArraySet<>();
         latestUpdate = new AtomicReference<>();
+        missingStateCounter = Metrics.newCounter(StaticQuotaCallback.metricName("io.strimzi.kafka.quotas", "MissingState", "ActiveBrokerQuotaFactorPolicyTask"));
     }
 
     @Override
@@ -93,12 +98,14 @@ public class ActiveBrokerQuotaFactorPolicyTask implements QuotaFactorPolicyTask 
                     log.warn("no metrics found for {} using the smallest of {} and {}", brokerId, missingDataQuotaFactor, quotaFactor);
                     log.debug("no metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
                     quotaFactor = updateQuotaFactor(quotaFactor, missingDataQuotaFactor);
+                    missingStateCounter.inc();
                     continue;
                 }
                 if (brokerSnapshot.getSnapshotAt().isBefore(metricsValidAfter)) {
                     log.warn("Stale metrics found for {} using the smallest of {} and {}", brokerId, missingDataQuotaFactor, quotaFactor);
                     log.debug("Stale metrics found for {} in {}", brokerId, mostRecentMetricsPerBroker);
                     quotaFactor = updateQuotaFactor(quotaFactor, missingDataQuotaFactor);
+                    missingStateCounter.inc();
                     continue;
                 }
                 final QuotaFactorPolicy quotaFactorPolicy = mapLimitsToQuotaPolicy(brokerSnapshot);
