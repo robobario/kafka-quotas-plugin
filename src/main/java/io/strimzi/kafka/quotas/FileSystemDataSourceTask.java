@@ -10,6 +10,7 @@ import java.nio.file.FileStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -37,7 +38,8 @@ public class FileSystemDataSourceTask implements DataSourceTask {
     private final long period;
 
     private final TimeUnit periodUnit = TimeUnit.SECONDS; //TODO Should this also be in config?
-    private final Set<FileStore> fileStores;
+    private Set<FileStore> fileStores;
+    private final List<Path> logDirs;
     private final String brokerId;
     private final Consumer<VolumeUsageMetrics> volumeUsageMetricsConsumer;
 
@@ -49,20 +51,10 @@ public class FileSystemDataSourceTask implements DataSourceTask {
         this.softLimit = softLimit;
         this.hardLimit = hardLimit;
         this.period = period;
-        fileStores = logDirs.stream()
-                .filter(Files::exists)
-                .map(path -> {
-                    try {
-                        return Files.getFileStore(path);
-                    } catch (IOException e) {
-                        log.warn("Unable to get fileStore for {} due to {}", path, e.getMessage(), e);
-                        return null;
-                    }
-                })
-                .filter(Objects::nonNull)
-                .collect(Collectors.toUnmodifiableSet());
+        this.logDirs = logDirs;
         this.brokerId = brokerId;
         this.volumeUsageMetricsConsumer = volumeUsageMetricsConsumer;
+        this.fileStores = Collections.emptySet();
 
         totalConsumedSpace = new AtomicLong(-1);
         //io.strimzi.kafka.quotas & StorageChecker are part of the public API so preserve the old names.
@@ -97,7 +89,31 @@ public class FileSystemDataSourceTask implements DataSourceTask {
     @Override
     public void run() {
         try {
-            log.debug("check filesystem usage");
+            if (log.isDebugEnabled()) {
+                final String volumes = fileStores.stream().map(FileStore::name).collect(Collectors.joining(",", "[", "]"));
+                log.debug("check filesystem usage for {} which resolved to {}", logDirs, volumes);
+            }
+            if (fileStores.isEmpty()) {
+                fileStores = logDirs.stream()
+                        .filter(Files::exists)
+                        .map(path -> {
+                            try {
+                                return Files.getFileStore(path);
+                            } catch (IOException e) {
+                                log.warn("Unable to get volume for {} due to {}", path, e.getMessage(), e);
+                                return null;
+                            }
+                        })
+                        .filter(Objects::nonNull)
+                        .collect(Collectors.toUnmodifiableSet());
+
+                if (fileStores.isEmpty()) {
+                    final String dirNames = logDirs.stream().map(Path::toAbsolutePath).map(Path::toString).collect(Collectors.joining(",", "[", "]"));
+                    log.warn("No volumes available from " + dirNames + ". Unable to monitor disk usage at this time.");
+                    return;
+                }
+            }
+
             final Instant snapshotAt = Instant.now();
             final LongAdder currentConsumedSpace = new LongAdder();
             final List<Volume> volumes = fileStores.stream()
@@ -118,7 +134,7 @@ public class FileSystemDataSourceTask implements DataSourceTask {
             log.debug("publishing volume usage metrics: {}", volumeUsageMetrics);
             volumeUsageMetricsConsumer.accept(volumeUsageMetrics);
         } catch (Exception e) {
-            log.warn("Error during FileSystemDataSourceTask execution: {}",  e.getMessage(), e);
+            log.warn("Error during FileSystemDataSourceTask execution: {}", e.getMessage(), e);
         }
     }
 

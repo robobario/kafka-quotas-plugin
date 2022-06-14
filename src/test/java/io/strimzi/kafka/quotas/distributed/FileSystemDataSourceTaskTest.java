@@ -51,8 +51,7 @@ class FileSystemDataSourceTaskTest {
     @BeforeEach
     void setUp() throws IOException {
         mockFileStore = Jimfs.newFileSystem("MockFileStore", Configuration.unix());
-        final Path dataPath = mockFileStore.getPath(mockFileStore.getSeparator());
-        logDir = Files.createDirectories(dataPath);
+        logDir = Files.createDirectories(mockFileStore.getPath("logDir1"));
 
         consumedBytesHardLimit = new Limit(Limit.LimitType.CONSUMED_BYTES, CONSUMED_BYTES_HARD_LIMIT);
         consumedBytesSoftLimit = new Limit(Limit.LimitType.CONSUMED_BYTES, CONSUMED_BYTES_SOFT_LIMIT);
@@ -64,7 +63,45 @@ class FileSystemDataSourceTaskTest {
         if (mockFileStore != null) {
             mockFileStore.close();
         }
-        Metrics.defaultRegistry().allMetrics().keySet().stream().filter(m -> "io.strimzi.kafka.quotas.StaticQuotaCallback".equals(m.getScope())).forEach(Metrics.defaultRegistry()::removeMetric);
+        resetMetrics();
+    }
+
+    @Test
+    void shouldSingleMissingLogDirsInStorageMetric() {
+        //Given
+        resetMetrics(); //Remove metrics created as part of setup
+
+        final Path dataPath = mockFileStore.getPath("logDir2");
+        dataSourceTask = new FileSystemDataSourceTask(List.of(dataPath), consumedBytesSoftLimit, consumedBytesHardLimit, 10, BROKER_ID, actualMetricUpdates::add);
+
+        //When
+        dataSourceTask.run();
+
+        //Then
+        assertThat(actualMetricUpdates).hasSize(0);
+        SortedMap<MetricName, Metric> group = getMetricGroup("io.strimzi.kafka.quotas.StaticQuotaCallback", "StorageChecker");
+        assertGaugeMetric(group, "TotalStorageUsedBytes", -1L);
+    }
+
+    @Test
+    void shouldDetectLogDirCreation() throws IOException {
+        //Given
+        resetMetrics(); //Remove metrics created as part of setup
+
+        final Path dataPath = mockFileStore.getPath("logDir2");
+        dataSourceTask = new FileSystemDataSourceTask(List.of(dataPath), consumedBytesSoftLimit, consumedBytesHardLimit, 10, BROKER_ID, actualMetricUpdates::add);
+        dataSourceTask.run();
+
+        Files.createDirectories(dataPath);
+        long usedBytes = prepareFileStore(dataPath, FILE_CONTENT);
+
+        //When
+        dataSourceTask.run();
+
+        //Then
+        assertThat(actualMetricUpdates).hasSize(1);
+        SortedMap<MetricName, Metric> group = getMetricGroup("io.strimzi.kafka.quotas.StaticQuotaCallback", "StorageChecker");
+        assertGaugeMetric(group, "TotalStorageUsedBytes", usedBytes);
     }
 
     @Test
@@ -164,5 +201,9 @@ class FileSystemDataSourceTaskTest {
             numBlocks = (fileSize / BLOCK_SIZE) + 1;
         }
         return numBlocks * BLOCK_SIZE;
+    }
+
+    private void resetMetrics() {
+        Metrics.defaultRegistry().allMetrics().keySet().stream().filter(m -> "io.strimzi.kafka.quotas.StaticQuotaCallback".equals(m.getScope())).forEach(Metrics.defaultRegistry()::removeMetric);
     }
 }
