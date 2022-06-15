@@ -93,49 +93,64 @@ public class FileSystemDataSourceTask implements DataSourceTask {
                 final String volumes = fileStores.stream().map(FileStore::name).collect(Collectors.joining(",", "[", "]"));
                 log.debug("check filesystem usage for {} which resolved to {}", logDirs, volumes);
             }
-            if (fileStores.isEmpty()) {
-                fileStores = logDirs.stream()
-                        .filter(Files::exists)
-                        .map(path -> {
-                            try {
-                                return Files.getFileStore(path);
-                            } catch (IOException e) {
-                                log.warn("Unable to get volume for {} due to {}", path, e.getMessage(), e);
-                                return null;
-                            }
-                        })
-                        .filter(Objects::nonNull)
-                        .collect(Collectors.toUnmodifiableSet());
 
-                if (fileStores.isEmpty()) {
-                    final String dirNames = logDirs.stream().map(Path::toAbsolutePath).map(Path::toString).collect(Collectors.joining(",", "[", "]"));
-                    log.warn("No volumes available from " + dirNames + ". Unable to monitor disk usage at this time.");
-                    return;
-                }
+            if (fileStores.isEmpty()) {
+                fileStores = mapLogDirsToVolumes();
+            }
+
+            if (fileStores.isEmpty()) {
+                final String dirNames = logDirs.stream().map(Path::toAbsolutePath).map(Path::toString).collect(Collectors.joining(",", "[", "]"));
+                log.warn("No volumes available from " + dirNames + ". Unable to monitor disk usage at this time.");
+                return;
             }
 
             final Instant snapshotAt = Instant.now();
             final LongAdder currentConsumedSpace = new LongAdder();
-            final List<Volume> volumes = fileStores.stream()
-                    .map(fs -> {
-                        try {
-                            final long consumedSpace = fs.getTotalSpace() - fs.getUsableSpace();
-                            currentConsumedSpace.add(consumedSpace);
-                            return new Volume(fs.name(), fs.getTotalSpace(), consumedSpace);
-                        } catch (IOException e) {
-                            log.warn("Unable to read disk usage for {} due to {}", fs.name(), e.getMessage(), e);
-                            return null;
-                        }
-                    })
-                    .filter(Objects::nonNull)
-                    .collect(Collectors.toUnmodifiableList());
+            final List<Volume> volumes = gatherVolumeUsage(currentConsumedSpace);
+
             totalConsumedSpace.set(currentConsumedSpace.longValue());
-            final VolumeUsageMetrics volumeUsageMetrics = new VolumeUsageMetrics(brokerId, snapshotAt, hardLimit, softLimit, volumes);
-            log.debug("publishing volume usage metrics: {}", volumeUsageMetrics);
-            volumeUsageMetricsConsumer.accept(volumeUsageMetrics);
+
+            publishVolumeUsage(snapshotAt, volumes);
         } catch (Exception e) {
             log.warn("Error during FileSystemDataSourceTask execution: {}", e.getMessage(), e);
         }
+    }
+
+    private Set<FileStore> mapLogDirsToVolumes() {
+        return logDirs.stream()
+                .filter(Files::exists)
+                .map(path -> {
+                    try {
+                        return Files.getFileStore(path);
+                    } catch (IOException e) {
+                        log.warn("Unable to get volume for {} due to {}", path, e.getMessage(), e);
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private List<Volume> gatherVolumeUsage(LongAdder currentConsumedSpace) {
+        return fileStores.stream()
+                .map(fs -> {
+                    try {
+                        final long consumedSpace = fs.getTotalSpace() - fs.getUsableSpace();
+                        currentConsumedSpace.add(consumedSpace);
+                        return new Volume(fs.name(), fs.getTotalSpace(), consumedSpace);
+                    } catch (IOException e) {
+                        log.warn("Unable to read disk usage for {} due to {}", fs.name(), e.getMessage(), e);
+                        return null;
+                    }
+                })
+                .filter(Objects::nonNull)
+                .collect(Collectors.toUnmodifiableList());
+    }
+
+    private void publishVolumeUsage(Instant snapshotAt, List<Volume> volumes) {
+        final VolumeUsageMetrics volumeUsageMetrics = new VolumeUsageMetrics(brokerId, snapshotAt, hardLimit, softLimit, volumes);
+        log.debug("publishing volume usage metrics: {}", volumeUsageMetrics);
+        volumeUsageMetricsConsumer.accept(volumeUsageMetrics);
     }
 
 }
