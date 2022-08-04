@@ -56,6 +56,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
     private ScheduledFuture<?> dataSourceFuture;
     private ScheduledFuture<?> quotaPolicyFuture;
     private ScheduledFuture<?> ensureTopicAvailableFuture;
+    private ScheduledFuture<?> ensureRackAwarePartitionAssignmentFuture;
 
     public StaticQuotaCallback() {
         this(
@@ -181,9 +182,17 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         List<Path> logDirs = config.getLogDirs().stream().map(Paths::get).collect(Collectors.toList());
 
         if (config.getStorageCheckInterval() > 0) {
-            ensureExistingTaskCancelled(ensureTopicAvailableFuture, dataSourceFuture);
+            ensureExistingTaskCancelled(ensureTopicAvailableFuture, ensureRackAwarePartitionAssignmentFuture, dataSourceFuture);
             String topic = config.getVolumeUsageMetricsTopic();
             ensureTopicAvailableFuture = executorService.scheduleWithFixedDelay(new EnsureTopicAvailableRunnable(kafkaClientManager, topic, config.getPartitionCount()), 0, config.getStorageCheckInterval(), TimeUnit.SECONDS);
+            ensureRackAwarePartitionAssignmentFuture = executorService.scheduleWithFixedDelay(
+                    new EnsureRackAwarePartitionAssignmentRunnable(kafkaClientManager,
+                            config.activeBrokerSupplier(),
+                            topic,
+                            config.getReplicationFactor(),
+                            config.getBrokerId(),
+                            config.activeBrokerNodesSupplier()),
+                    0, config.getStorageCheckInterval(), TimeUnit.SECONDS);
 
             final FileSystemDataSourceTask fileSystemDataSourceTask = new FileSystemDataSourceTask(logDirs, config.getSoftLimit(), config.getHardLimit(), config.getStorageCheckInterval(), config.getBrokerId(), config.volumeUsageMetricsPublisher());
             dataSourceFuture = executorService.scheduleWithFixedDelay(fileSystemDataSourceTask, 0, fileSystemDataSourceTask.getPeriod(), fileSystemDataSourceTask.getPeriodUnit());

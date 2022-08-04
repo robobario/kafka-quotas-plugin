@@ -224,6 +224,11 @@ public class StaticQuotaConfig extends AbstractConfig {
         return (String) configMap.getOrDefault("broker.id", brokerIdFromSysProps);
     }
 
+    public int getReplicationFactor() {
+        final String defaultReplicationFactor = (String) originals().getOrDefault("default.replication.factor",  "-1");
+        return Integer.parseInt(defaultReplicationFactor);
+    }
+
     /**
      * @return a function which accepts a volume metrics snapshot and sends it to the configured destination
      */
@@ -247,18 +252,26 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     /**
-     * @return A function which resolves the set of nodeId's which Kafka considers to be part of the cluster
+     * @return A function which resolves the set of nodeId's which Kafka considers to be actively part of the cluster
      */
     public Supplier<Collection<String>> activeBrokerSupplier() {
+        return () -> activeBrokerNodesSupplier().get().stream().map(Node::idString).collect(Collectors.toSet());
+    }
+
+    /**
+     * @return A function which resolves the set of nodes which Kafka considers to be actively part of the cluster
+     */
+    public Supplier<Collection<Node>> activeBrokerNodesSupplier() {
         return () -> {
             try {
-                return kafkaClientManager.adminClient().describeCluster().nodes().thenApply(nodes -> nodes.stream().map(Node::idString).collect(Collectors.toSet())).get(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP), TimeUnit.SECONDS);
+                return kafkaClientManager.adminClient().describeCluster().nodes()
+                        .get(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP), TimeUnit.SECONDS);
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                log.warn("unable to get current set of active brokers: {}", e.getMessage(), e);
+                log.warn("unable to get current set of broker nodes: {}", e.getMessage(), e);
                 return Set.of();
             } catch (ExecutionException | TimeoutException e) {
-                log.warn("unable to get current set of active brokers: {}", e.getMessage(), e);
+                log.warn("unable to get current set of broker nodes: {}", e.getMessage(), e);
                 return Set.of();
             }
         };

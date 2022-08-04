@@ -231,6 +231,7 @@ class StaticQuotaCallbackTest {
         final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
         doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(DataSourceTask.class), anyLong(), anyLong(), any());
         doReturn(null).when(executorService).scheduleWithFixedDelay(isA(EnsureTopicAvailableRunnable.class), anyLong(), anyLong(), any());
+        doReturn(null).when(executorService).scheduleWithFixedDelay(isA(EnsureRackAwarePartitionAssignmentRunnable.class), anyLong(), anyLong(), any());
         final int interval = 10;
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
 
@@ -276,7 +277,55 @@ class StaticQuotaCallbackTest {
         final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(executorService, this::spyOnQuotaConfig, kafkaClientManager);
         final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
         doReturn(null).when(executorService).scheduleWithFixedDelay(isA(DataSourceTask.class), anyLong(), anyLong(), any());
+        doReturn(null).when(executorService).scheduleWithFixedDelay(isA(EnsureRackAwarePartitionAssignmentRunnable.class), anyLong(), anyLong(), any());
         doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(EnsureTopicAvailableRunnable.class), anyLong(), anyLong(), any());
+        final int interval = 10;
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
+
+        //When
+        //Because calling configure again could potentially re-configure the scheduledTask it should be cancelled and re-scheduled
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
+
+        //Then
+        verify(scheduledFuture).cancel(false);
+    }
+
+    @Test
+    void shouldNotScheduleEnsureRackAwarePartitionAssignmentRunnable() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(executorService, this::spyOnQuotaConfig, kafkaClientManager);
+
+        //When
+        staticQuotaCallback.configure(Map.of());
+
+        //Then
+        verifyNoInteractions(executorService);
+    }
+
+    @Test
+    void shouldScheduleEnsureRackAwarePartitionAssignmentRunnable() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(executorService, this::spyOnQuotaConfig, kafkaClientManager);
+        final Long interval = 10L;
+
+        //When
+        staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval.intValue()));
+
+        //Then
+        verify(executorService).scheduleWithFixedDelay(isA(EnsureRackAwarePartitionAssignmentRunnable.class), anyLong(), eq(interval), eq(TimeUnit.SECONDS));
+    }
+
+    @Test
+    void shouldCancelExistingScheduleEnsureRackAwarePartitionAssignmentRunnable() {
+        //Given
+        final ScheduledExecutorService executorService = mock(ScheduledExecutorService.class);
+        final StaticQuotaCallback staticQuotaCallback = new StaticQuotaCallback(executorService, this::spyOnQuotaConfig, kafkaClientManager);
+        final ScheduledFuture<?> scheduledFuture = mock(ScheduledFuture.class);
+        doReturn(null).when(executorService).scheduleWithFixedDelay(isA(DataSourceTask.class), anyLong(), anyLong(), any());
+        doReturn(null).when(executorService).scheduleWithFixedDelay(isA(EnsureTopicAvailableRunnable.class), anyLong(), anyLong(), any());
+        doReturn(scheduledFuture).when(executorService).scheduleWithFixedDelay(isA(EnsureRackAwarePartitionAssignmentRunnable.class), anyLong(), anyLong(), any());
         final int interval = 10;
         staticQuotaCallback.configure(Map.of(STORAGE_CHECK_INTERVAL_PROP, interval));
 
