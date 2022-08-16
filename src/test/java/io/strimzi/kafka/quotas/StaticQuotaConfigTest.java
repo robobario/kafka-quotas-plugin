@@ -5,11 +5,14 @@
 
 package io.strimzi.kafka.quotas;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.types.Limit;
+import org.apache.kafka.common.Node;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junitpioneer.jupiter.ClearSystemProperty;
@@ -18,6 +21,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static io.strimzi.kafka.quotas.StaticQuotaConfig.EXCLUDED_PRINCIPAL_NAME_LIST_PROP;
+import static io.strimzi.kafka.quotas.StaticQuotaConfig.NODES_CACHE_EXPIRY_PROP;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @ExtendWith(MockitoExtension.class)
@@ -105,6 +109,19 @@ class StaticQuotaConfigTest {
 
         //Then
         assertThat(actualExcludedPrincipals).containsExactlyInAnyOrder("bob", "fred", "super.user");
+    }
+
+    @Test
+    void shouldCacheActiveNodes() {
+        //Given
+        final StaticQuotaConfig staticQuotaConfig = newStaticQuotaConfig(Map.of(NODES_CACHE_EXPIRY_PROP, "PT90s"));
+        final Supplier<Collection<Node>> activeBrokerNodesSupplier1 = staticQuotaConfig.activeBrokerNodesSupplier();
+
+        //When
+        final Supplier<Collection<Node>> activeBrokerNodesSupplier2 = staticQuotaConfig.activeBrokerNodesSupplier();
+
+        //Then
+        assertThat(activeBrokerNodesSupplier1).isSameAs(activeBrokerNodesSupplier2);
     }
 
     private StaticQuotaConfig newStaticQuotaConfig(Map<String, String> config) {

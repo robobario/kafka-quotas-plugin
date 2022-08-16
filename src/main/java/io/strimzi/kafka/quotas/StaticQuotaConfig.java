@@ -16,11 +16,13 @@ import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
+import com.google.common.base.Suppliers;
 import io.strimzi.kafka.quotas.distributed.KafkaClientManager;
 import io.strimzi.kafka.quotas.local.InMemoryQuotaFactorSupplier;
 import io.strimzi.kafka.quotas.local.StaticQuotaSupplier;
@@ -67,6 +69,7 @@ public class StaticQuotaConfig extends AbstractConfig {
     static final String VOLUME_USAGE_METRICS_TOPIC_PROP = "client.quota.callback.usageMetrics.topic";
     static final String TOPIC_PARTITION_COUNT_PROP = "client.quota.callback.kafka.partitionCount";
     static final String KAFKA_READ_TIMEOUT_SECONDS_PROP = "client.quota.callback.kafka.readTimeout";
+    static final String NODES_CACHE_EXPIRY_PROP = "client.quota.callback.nodeCacheExpiry";
     static final String MISSING_DATA_QUOTA_FACTOR_PROP = "client.quota.callback.missingDataDFactor";
     static final String STALE_METRICS_DATA_PROP = "client.quota.callback.usageMetrics.staleDuration";
 
@@ -74,6 +77,8 @@ public class StaticQuotaConfig extends AbstractConfig {
     private static final String SUPER_USERS_CONFIG_PROP = "super.users";
 
     private final Logger log = LoggerFactory.getLogger(StaticQuotaConfig.class);
+    private final AtomicReference<Supplier<Collection<Node>>> activeBrokerSupplier = new AtomicReference<>();
+
     private KafkaClientManager kafkaClientManager;
 
     /**
@@ -96,6 +101,7 @@ public class StaticQuotaConfig extends AbstractConfig {
                         .define(VOLUME_USAGE_METRICS_TOPIC_PROP, STRING, "__strimzi_volumeUsageMetrics", LOW, "topic used to propagate volume usage metrics")
                         .define(TOPIC_PARTITION_COUNT_PROP, INT, "1", LOW, "The number of partitions to use for the topics used by the plugin")
                         .define(KAFKA_READ_TIMEOUT_SECONDS_PROP, INT, "10", LOW, "How long should the plugin wait for kafka interactions")
+                        .define(NODES_CACHE_EXPIRY_PROP, STRING, "PT10s", ConfigDef.LambdaValidator.with(StaticQuotaConfig::validateDuration, () -> "DurationValidator"), LOW, "How long should the plugin wait cache the set of active brokers, expressed as a java.time.Duration")
                         .define(STALE_METRICS_DATA_PROP, STRING, "PT10m", ConfigDef.LambdaValidator.with(StaticQuotaConfig::validateDuration, () -> "DurationValidator"), LOW, "After what java.time.Duration should broker metrics be considered stale and ignored.")
                         .define(LOG_DIRS_PROP, LIST, List.of(), HIGH, "Broker log directories"),
                 props,
@@ -262,19 +268,27 @@ public class StaticQuotaConfig extends AbstractConfig {
      * @return A function which resolves the set of nodes which Kafka considers to be actively part of the cluster
      */
     public Supplier<Collection<Node>> activeBrokerNodesSupplier() {
-        return () -> {
-            try {
-                return kafkaClientManager.adminClient().describeCluster().nodes()
-                        .get(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP), TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                log.warn("unable to get current set of broker nodes: {}", e.getMessage(), e);
-                return Set.of();
-            } catch (ExecutionException | TimeoutException e) {
-                log.warn("unable to get current set of broker nodes: {}", e.getMessage(), e);
-                return Set.of();
-            }
-        };
+        if (activeBrokerSupplier.get() == null) {
+            final Duration duration = getDuration(NODES_CACHE_EXPIRY_PROP);
+            activeBrokerSupplier.compareAndSet(null,
+                    Suppliers.memoizeWithExpiration(
+                        () -> {
+                            try {
+                                return kafkaClientManager.adminClient().describeCluster().nodes()
+                                        .get(getInt(KAFKA_READ_TIMEOUT_SECONDS_PROP), TimeUnit.SECONDS);
+                            } catch (InterruptedException e) {
+                                Thread.currentThread().interrupt();
+                                log.warn("unable to get current set of broker nodes: {}", e.getMessage(), e);
+                                return Set.of();
+                            } catch (ExecutionException | TimeoutException e) {
+                                log.warn("unable to get current set of broker nodes: {}", e.getMessage(), e);
+                                return Set.of();
+                            }
+                        },
+                        duration.toMillis(),
+                        TimeUnit.MILLISECONDS));
+        }
+        return activeBrokerSupplier.get();
     }
 
     public double getMissingDataQuotaFactor() {
@@ -291,8 +305,12 @@ public class StaticQuotaConfig extends AbstractConfig {
     }
 
     public Duration getMetricsStaleAfterDuration() {
+        return getDuration(STALE_METRICS_DATA_PROP);
+    }
+
+    public Duration getDuration(String propKey) {
         //We don't need to handle parse errors here as value is validated to be parseable by the config system
-        return Duration.parse(getString(STALE_METRICS_DATA_PROP));
+        return Duration.parse(getString(propKey));
     }
 
     private Set<String> getSuperUserPrincipals() {
