@@ -132,14 +132,6 @@ public class StaticQuotaConfig extends AbstractConfig {
         return m;
     }
 
-    long getHardStorageQuota() {
-        return getLong(STORAGE_QUOTA_HARD_PROP);
-    }
-
-    long getSoftStorageQuota() {
-        return getLong(STORAGE_QUOTA_SOFT_PROP);
-    }
-
     Limit getHardLimit() {
         return new Limit(Limit.LimitType.CONSUMED_BYTES, getLong(STORAGE_QUOTA_HARD_PROP));
     }
