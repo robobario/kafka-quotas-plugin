@@ -81,7 +81,7 @@
         <maven.compiler.source>11</maven.compiler.source>
         <maven.compiler.target>11</maven.compiler.target>
         <maven.compiler.version>3.8.1</maven.compiler.version>
-        <maven.surefire.version>3.0.0-M5</maven.surefire.version>
+        <maven.surefire.version>3.0.0-M7</maven.surefire.version>
         <maven.assembly.version>3.1.0</maven.assembly.version>
         <maven.shade.version>3.1.0</maven.shade.version>
         <maven.javadoc.version>3.1.0</maven.javadoc.version>
@@ -108,6 +108,7 @@
         <jimfs.version>1.2</jimfs.version>
         <junit-pioneer.version>1.7.0</junit-pioneer.version>
         <generated-sources-dir>${project.build.directory}/generated-sources/jsonschema2pojo</generated-sources-dir>
+        <scala.version>2.13.6</scala.version>
     </properties>
 
     <distributionManagement>
@@ -140,11 +141,32 @@
             <version>${kafka.version}</version>
             <scope>provided</scope>
         </dependency>
+
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka_2.13</artifactId>
+            <version>${kafka.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId> org.scala-lang</groupId>
+            <artifactId>scala-library</artifactId>
+            <version>${scala.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
             <version>${slf4j.version}</version>
             <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <version>${slf4j.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>com.yammer.metrics</groupId>
@@ -178,6 +200,13 @@
             <groupId>com.fasterxml.jackson.datatype</groupId>
             <artifactId>jackson-datatype-jsr310</artifactId>
             <version>${jackson.version}</version>
+            <scope>provided</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>com.google.guava</groupId>
+            <artifactId>guava</artifactId>
+            <version>30.0-jre</version>
             <scope>provided</scope>
         </dependency>
 
@@ -227,7 +256,6 @@
             <version>${junit-pioneer.version}</version>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>
@@ -372,9 +400,14 @@
                     </environmentVariables>
                     <trimStackTrace>false</trimStackTrace>
                     <forkCount>1</forkCount>
+                    <useUnlimitedThreads>true</useUnlimitedThreads>
+                    <parallel>all</parallel>
+                    <reuseForks>true</reuseForks>
+                    <forkedProcessTimeoutInSeconds>90</forkedProcessTimeoutInSeconds>
+                    <forkedProcessExitTimeoutInSeconds>90</forkedProcessExitTimeoutInSeconds>
+                    <skipTests>${skip.surefire.tests}</skipTests>
                     <!-- This is workaround for https://issues.apache.org/jira/browse/SUREFIRE-1809 -->
                     <useModulePath>false</useModulePath>
-                    <skipTests>${skip.surefire.tests}</skipTests>
                 </configuration>
             </plugin>
             <plugin>
@@ -414,6 +447,7 @@
                         <configuration>
                             <failOnWarning>true</failOnWarning>
                             <ignoredUnusedDeclaredDependencies>
+                                <ignoredUnusedDeclaredDependency>org.slf4j:slf4j-simple</ignoredUnusedDeclaredDependency>
                             </ignoredUnusedDeclaredDependencies>
                         </configuration>
                     </execution>

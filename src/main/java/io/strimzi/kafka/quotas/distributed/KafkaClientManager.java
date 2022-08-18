@@ -70,10 +70,12 @@ public class KafkaClientManager implements Closeable, Configurable {
                 log.warn("caught exception closing consumer. Continuing to closing others: {}", e.getMessage(), e);
             }
         }
-        try {
-            adminClientHolder.get(Admin.class).close(CLOSE_TIMEOUT);
-        } catch (Exception e) {
-            log.warn("caught exception closing adminClient: {}", e.getMessage(), e);
+        for (Admin admin : adminClientHolder.values()) {
+            try {
+                admin.close(CLOSE_TIMEOUT);
+            } catch (Exception e) {
+                log.warn("caught exception closing adminClient: {}", e.getMessage(), e);
+            }
         }
     }
 
