@@ -73,7 +73,7 @@ public class EnsureRackAwarePartitionAssignmentRunnable implements Runnable {
             log.info("ensuring {} is resiliently distributed across available racks: {}", topic, availableRacks.values().stream().distinct().collect(Collectors.joining(", ", "[", "]")));
             return kafkaClientManager.adminClient()
                     .describeTopics(Set.of(topic))
-                    .all()
+                    .allTopicNames()
                     .toCompletionStage()
                     .thenApply(this::getRacksFromTopicDescription)
                     .thenApply(currentRacks -> generatePartitionToReplicaAssignments(topic, desiredReplicaCount, availableRacks, currentRacks))
