@@ -1,11 +1,15 @@
+/*
+ * Copyright 2020, Red Hat Inc.
+ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
+ */
 package io.strimzi.kafka.quotas;
+
+import java.util.List;
 
 import org.assertj.core.api.Assertions;
 import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-
-import java.util.List;
 
 @SuppressWarnings("deprecation")
 class TotalConsumedThrottleFactorSupplierTest {

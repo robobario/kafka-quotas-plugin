@@ -119,6 +119,7 @@ public class StaticQuotaCallback implements ClientQuotaCallback {
         }
     }
 
+    @SuppressWarnings("deprecation")
     @Override
     public void configure(Map<String, ?> configs) {
         StaticQuotaConfig config = new StaticQuotaConfig(configs, true);

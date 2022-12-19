@@ -1,3 +1,7 @@
+/*
+ * Copyright 2020, Red Hat Inc.
+ * License: Apache License 2.0 (see the file LICENSE or http://apache.org/licenses/LICENSE-2.0.html).
+ */
 package io.strimzi.kafka.quotas;
 
 import java.util.Collection;
@@ -36,11 +40,11 @@ public class TotalConsumedThrottleFactorSupplier implements ThrottleFactorSuppli
     public void accept(Collection<Volume> volumes) {
         long totalConsumed = volumes.stream().mapToLong(Volume::getConsumedSpace).sum();
         long oldValue = storageUsed.getAndSet(totalConsumed);
-        if(oldValue != totalConsumed) {
+        if (oldValue != totalConsumed) {
             if (totalConsumed >= consumedBytesHardLimit) {
                 throttleFactor = 0.0;
             } else if (totalConsumed >= consumedBytesSoftLimit) {
-                throttleFactor = (1.0d - (1.0d * (totalConsumed - consumedBytesSoftLimit) / (consumedBytesHardLimit - consumedBytesSoftLimit)));
+                throttleFactor = 1.0d - (1.0d * (totalConsumed - consumedBytesSoftLimit) / (consumedBytesHardLimit - consumedBytesSoftLimit));
             } else {
                 throttleFactor = 1.0d;
             }
