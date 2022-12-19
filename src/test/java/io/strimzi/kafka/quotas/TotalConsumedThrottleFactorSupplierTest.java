@@ -9,7 +9,11 @@ import java.util.List;
 import org.assertj.core.api.Assertions;
 import org.assertj.core.data.Offset;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 @SuppressWarnings("deprecation")
 class TotalConsumedThrottleFactorSupplierTest {
@@ -17,33 +21,33 @@ class TotalConsumedThrottleFactorSupplierTest {
     @Test
     public void testListenersNotifiedOnChange() {
         TotalConsumedThrottleFactorSupplier supplier = new TotalConsumedThrottleFactorSupplier(900L, 900L);
-        Runnable runnable = Mockito.mock(Runnable.class);
+        Runnable runnable = mock(Runnable.class);
         supplier.addUpdateListener(runnable);
         supplier.accept(List.of(new Volume("1", "/dir", 1000L, 100L)));
-        Mockito.verify(runnable).run();
+        verify(runnable).run();
     }
 
     @Test
     public void testListenerNotNotifiedIfTotalConsumedUnchanged() {
         TotalConsumedThrottleFactorSupplier supplier = new TotalConsumedThrottleFactorSupplier(900L, 900L);
-        Runnable runnable = Mockito.mock(Runnable.class);
+        Runnable runnable = mock(Runnable.class);
         supplier.addUpdateListener(runnable);
         supplier.accept(List.of(new Volume("1", "/dir", 1000L, 100L)));
-        Mockito.verify(runnable).run();
+        verify(runnable).run();
         supplier.accept(List.of(new Volume("1", "/dir", 1000L, 100L)));
-        Mockito.verifyNoMoreInteractions(runnable);
+        verifyNoMoreInteractions(runnable);
     }
 
     @Test
     public void testListenerNotifiedIfTotalConsumedChanged() {
         TotalConsumedThrottleFactorSupplier supplier = new TotalConsumedThrottleFactorSupplier(900L, 900L);
-        Runnable runnable = Mockito.mock(Runnable.class);
+        Runnable runnable = mock(Runnable.class);
         supplier.addUpdateListener(runnable);
         supplier.accept(List.of(new Volume("1", "/dir", 1000L, 100L)));
-        Mockito.verify(runnable).run();
+        verify(runnable).run();
         supplier.accept(List.of(new Volume("1", "/dir", 1000L, 50L)));
-        Mockito.verify(runnable, Mockito.times(2)).run();
-        Mockito.verifyNoMoreInteractions(runnable);
+        verify(runnable, times(2)).run();
+        verifyNoMoreInteractions(runnable);
     }
 
     @Test
